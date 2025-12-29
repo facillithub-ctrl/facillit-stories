@@ -1,22 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 
-// --- CLIENTES INDEPENDENTES ---
-
-// 1. Cliente HUB (Fonte da Identidade)
+// 1. Cliente HUB (Identidade)
 const hubClient = createClient(
   process.env.NEXT_PUBLIC_HUB_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_HUB_ANON_KEY!
 );
 
-// 2. Cliente STORIES (Fonte dos Dados Sociais)
-const storiesClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-// --- TIPAGEM UNIFICADA ---
 export interface UserProfile {
-  user_id: string; // <--- CORREÇÃO: Adicionado
+  user_id: string;
   facillit_id: string;
   username: string; 
   full_name: string | null;
@@ -26,7 +17,6 @@ export interface UserProfile {
   user_category: string | null;
   verification_badge: string | null;
   created_at: string;
-  
   stats: {
     followers: number;
     following: number;
@@ -36,35 +26,38 @@ export interface UserProfile {
 }
 
 export async function getProfileByUsername(username: string): Promise<UserProfile | null> {
+  console.log(`[PROFILE_SERVICE] 🔍 Buscando perfil para: ${username}`);
+  
   try {
-    // ---------------------------------------------------------
-    // ETAPA 1: Buscar Identidade no HUB
-    // ---------------------------------------------------------
     const { data: hubData, error: hubError } = await hubClient
       .from("profiles")
-      .select("*") // Seleciona tudo para garantir que user_id venha
+      .select("*") // Pega tudo para garantir que não estamos esquecendo colunas
       .eq("nickname", username)
       .single();
 
-    if (hubError || !hubData) {
+    if (hubError) {
+      console.error(`[PROFILE_SERVICE] ❌ Erro ao buscar no HUB:`, hubError.message);
       return null;
     }
 
-    // ---------------------------------------------------------
-    // ETAPA 2: Buscar Dados Sociais no STORIES (Mock por enquanto)
-    // ---------------------------------------------------------
-    const socialStats = {
-      followers: 0,
-      following: 0,
-      posts: 0,
-      books_read: 0
-    };
+    if (!hubData) {
+      console.warn(`[PROFILE_SERVICE] ⚠️ Perfil não encontrado para: ${username}`);
+      return null;
+    }
 
-    // ---------------------------------------------------------
-    // ETAPA 3: Retornar Objeto Unificado
-    // ---------------------------------------------------------
+    // LOG CRÍTICO: Verifique se 'user_id' aparece neste objeto no terminal
+    console.log(`[PROFILE_SERVICE] ✅ Dados brutos retornados:`, { 
+        nickname: hubData.nickname, 
+        user_id: hubData.user_id, // <-- Este é o campo vital
+        facillit_id: hubData.facillit_id 
+    });
+
+    if (!hubData.user_id) {
+        console.error(`[PROFILE_SERVICE] 🚨 PERIGO: O campo 'user_id' está vindo NULO ou UNDEFINED do banco.`);
+    }
+
     return {
-      user_id: hubData.user_id, // <--- CORREÇÃO: Repassando o ID real
+      user_id: hubData.user_id,
       facillit_id: hubData.facillit_id,
       username: hubData.nickname,
       full_name: hubData.full_name,
@@ -74,11 +67,11 @@ export async function getProfileByUsername(username: string): Promise<UserProfil
       user_category: hubData.user_category,
       verification_badge: hubData.verification_badge || hubData.badge,
       created_at: hubData.created_at,
-      stats: socialStats
+      stats: { followers: 0, following: 0, posts: 0, books_read: 0 }
     };
 
   } catch (error) {
-    console.error("Erro fatal no serviço getProfileByUsername:", error);
+    console.error("[PROFILE_SERVICE] 💥 Erro fatal (Exception):", error);
     return null;
   }
 }

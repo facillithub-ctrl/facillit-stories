@@ -17,7 +17,6 @@ interface PageProps {
 export default function ChatPage({ params }: PageProps) {
   const { userId: targetUserId } = use(params);
 
-  // Estados
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -40,30 +39,49 @@ export default function ChatPage({ params }: PageProps) {
 
   useEffect(() => {
     async function init() {
-      // Validação crítica de ID para evitar tela branca
+      console.log("[CHAT_CLIENT] 🚀 Inicializando Chat. TargetID:", targetUserId);
+
+      // Validação crítica
       if (!targetUserId || targetUserId === 'undefined' || targetUserId.length < 10) {
-          setError("Usuário inválido ou não encontrado.");
+          console.error("[CHAT_CLIENT] ❌ ID de destino inválido:", targetUserId);
+          setError("Usuário inválido ou não encontrado. Verifique o link de origem.");
           return;
       }
 
       const { data: { user } } = await hubSupabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+          console.warn("[CHAT_CLIENT] ⚠️ Usuário não autenticado no cliente.");
+          return;
+      }
+      
+      console.log("[CHAT_CLIENT] ✅ Usuário autenticado:", user.id);
       setCurrentUserId(user.id);
 
       // Buscar perfil no HUB
-      const { data: target } = await hubSupabase
+      console.log("[CHAT_CLIENT] Buscando perfil do destinatário no HUB...");
+      const { data: target, error: targetError } = await hubSupabase
         .from("profiles")
         .select("nickname, avatar_url, verification_badge")
         .eq("user_id", targetUserId)
         .single();
         
+      if (targetError) {
+          console.error("[CHAT_CLIENT] ❌ Erro ao buscar perfil alvo:", targetError);
+          setError("Erro ao carregar dados do usuário.");
+          return;
+      }
+
       if (target) {
+          console.log("[CHAT_CLIENT] ✅ Perfil alvo encontrado:", target.nickname);
           setTargetUser(target);
-          // Carregar mensagens apenas se o usuário existir
+          
+          console.log("[CHAT_CLIENT] Carregando histórico de mensagens...");
           const initialMsgs = await fetchMessages(targetUserId);
+          console.log(`[CHAT_CLIENT] ✅ ${initialMsgs.length} mensagens carregadas.`);
           setMessages(initialMsgs);
           markAsRead(targetUserId);
       } else {
+          console.warn("[CHAT_CLIENT] ⚠️ Perfil alvo não existe no banco.");
           setError("Perfil de usuário não encontrado.");
       }
     }
@@ -73,14 +91,20 @@ export default function ChatPage({ params }: PageProps) {
   // Realtime
   useEffect(() => {
     if (!currentUserId || !targetUserId || error || targetUserId === 'undefined') return;
+    
+    console.log("[CHAT_CLIENT] 📡 Conectando Realtime...");
     const channel = storiesSupabase.channel(`chat:${currentUserId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${currentUserId}` }, (payload) => {
+        console.log("[CHAT_CLIENT] 📩 Nova mensagem recebida via Realtime:", payload);
         const newMsg = payload.new as Message;
         if (newMsg.sender_id === targetUserId) {
            setMessages(prev => [...prev, newMsg]);
            markAsRead(targetUserId);
         }
-      }).subscribe();
+      }).subscribe((status) => {
+          console.log("[CHAT_CLIENT] Status Realtime:", status);
+      });
+
     return () => { storiesSupabase.removeChannel(channel); }
   }, [currentUserId, targetUserId, error]);
 
@@ -89,6 +113,8 @@ export default function ChatPage({ params }: PageProps) {
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!newMessage.trim() || !currentUserId || isSending) return;
+    
+    console.log("[CHAT_CLIENT] 📤 Tentando enviar mensagem...");
     setIsSending(true);
     const contentToSend = newMessage;
     setNewMessage(""); 
@@ -98,11 +124,16 @@ export default function ChatPage({ params }: PageProps) {
     const tempMsg: Message = { id: tempId, content: contentToSend, sender_id: currentUserId, receiver_id: targetUserId, created_at: new Date().toISOString(), read_at: null };
     setMessages(prev => [...prev, tempMsg]);
 
+    // Chamada ao Server Action
     const result = await sendMessageAction(contentToSend, targetUserId);
+    
     if (result.error) {
+        console.error("[CHAT_CLIENT] ❌ Erro no envio (Server Action):", result.error);
         setMessages(prev => prev.filter(m => m.id !== tempId));
         alert("Erro: " + result.error);
         setNewMessage(contentToSend);
+    } else {
+        console.log("[CHAT_CLIENT] ✅ Mensagem enviada e persistida:", result.data);
     }
     setIsSending(false);
   };
@@ -114,6 +145,7 @@ export default function ChatPage({ params }: PageProps) {
                 <ArrowLeft className="text-gray-400" />
             </div>
             <h3 className="text-lg font-bold text-gray-900">{error}</h3>
+            <p className="text-xs text-gray-400 mt-2 font-mono">ID: {targetUserId}</p>
             <Link href="/" className="mt-4 text-brand-purple font-bold hover:underline">Voltar ao início</Link>
         </div>
       );
