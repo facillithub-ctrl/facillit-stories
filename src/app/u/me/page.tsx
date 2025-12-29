@@ -3,9 +3,9 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 export default async function MyProfileRedirect() {
-  const cookieStore = cookies();
+  // CORREÇÃO NEXT.js 15: cookies() agora é assíncrono
+  const cookieStore = await cookies();
   
-  // 1. Conectar ao HUB (onde está a Auth e o Profile original)
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_HUB_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_HUB_ANON_KEY!,
@@ -18,14 +18,13 @@ export default async function MyProfileRedirect() {
     }
   );
 
-  // 2. Verificar Sessão
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
     redirect("/login");
   }
 
-  // 3. Buscar o nickname (username) na tabela profiles do Hub
+  // Buscar o nickname correto no Hub
   const { data: profile } = await supabase
     .from("profiles")
     .select("nickname")
@@ -33,10 +32,9 @@ export default async function MyProfileRedirect() {
     .single();
 
   if (profile?.nickname) {
-    // 4. Redirecionar para a URL correta
     redirect(`/u/${profile.nickname}`);
   } else {
-    // Fallback se não tiver perfil criado
+    // Se logou mas não tem perfil, manda para home
     redirect("/");
   }
 }

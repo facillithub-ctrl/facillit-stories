@@ -1,23 +1,25 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
-import { cookies } from "next/headers"; // Necessário para checar sessão no Server Component
+import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
 import { getProfileByUsername } from "@/services/profile";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Calendar, UserPlus, MessageCircle, Settings, Share2, BookOpen } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 // Tipagem dos parâmetros da rota
 interface ProfilePageProps {
-  params: { username: string };
+  params: Promise<{ username: string }>; // Params é Promise no Next 15
 }
 
 // SEO Dinâmico
 export async function generateMetadata({ params }: ProfilePageProps): Promise<Metadata> {
-  const profile = await getProfileByUsername(params.username);
+  const { username } = await params;
+  const profile = await getProfileByUsername(username);
+  
   if (!profile) return { title: "Perfil não encontrado" };
+
   return {
     title: `${profile.full_name || profile.username} (@${profile.username}) | Facillit Stories`,
     description: profile.bio || `Confira o perfil de leitura de ${profile.username}.`,
@@ -26,15 +28,19 @@ export async function generateMetadata({ params }: ProfilePageProps): Promise<Me
 }
 
 export default async function ProfilePage({ params }: ProfilePageProps) {
-  // 1. Busca os dados do perfil VISITADO (Público)
-  const profile = await getProfileByUsername(params.username);
+  // 1. Aguarda os parâmetros da rota (Next.js 15)
+  const { username } = await params;
+  
+  // 2. Busca os dados do perfil VISITADO (Público)
+  const profile = await getProfileByUsername(username);
 
   if (!profile) {
     notFound();
   }
 
-  // 2. Busca o usuário LOGADO (Para determinar permissões)
-  const cookieStore = cookies();
+  // 3. Busca o usuário LOGADO (com await cookies)
+  const cookieStore = await cookies();
+  
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_HUB_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_HUB_ANON_KEY!,
@@ -47,22 +53,15 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
   const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-  // 3. Determina o Status da Relação
+  // 4. Determina o Status da Relação
   const isLoggedIn = !!currentUser;
   
-  // Para saber se é o dono, precisamos comparar um ID único.
-  // O currentUser.id do Auth é diferente do facillit_id, mas o Auth ID está vinculado no Hub.
-  // Idealmente, compararíamos facillit_id, mas por segurança rápida, comparamos se o email bate ou se buscamos o facillit_id do logado.
-  // Neste MVP, vamos assumir que NÃO É o dono se não conseguirmos validar, ou verificar se o username bate (se o usuário logado tiver metadata).
-  
-  // Estratégia mais segura: Buscar o facillit_id do usuário logado
   let isOwner = false;
   if (currentUser) {
-     // Pequena query para saber o ID do logado
      const { data: myProfile } = await supabase
         .from("profiles")
         .select("facillit_id")
-        .eq("user_id", currentUser.id) // user_id do Auth linka com user_id da tabela profiles
+        .eq("user_id", currentUser.id)
         .single();
      
      if (myProfile && myProfile.facillit_id === profile.facillit_id) {
