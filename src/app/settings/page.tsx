@@ -1,5 +1,5 @@
 import { Sidebar } from "@/components/layout/Sidebar";
-import { User, Eye, Lock, Palette } from "lucide-react";
+import { User, Eye, Lock, Palette, SidebarClose } from "lucide-react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
@@ -33,7 +33,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="flex min-h-screen bg-white text-black">
-      <Sidebar />
+      <SidebarClose/>
       
       <main className="flex-1 lg:ml-64 p-8 max-w-4xl">
         <h1 className="text-3xl font-bold mb-2">Configurações</h1>
