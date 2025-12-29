@@ -4,8 +4,6 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
-// --- LIKES ---
-
 export async function toggleLike(postId: string, currentUserId: string) {
   const cookieStore = await cookies();
   const supabase = createServerClient(
@@ -14,7 +12,6 @@ export async function toggleLike(postId: string, currentUserId: string) {
     { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
   );
 
-  // 1. Verifica se já deu like
   const { data: existingLike } = await supabase
     .from("likes")
     .select("*")
@@ -23,20 +20,15 @@ export async function toggleLike(postId: string, currentUserId: string) {
     .single();
 
   if (existingLike) {
-    // Remove Like
     await supabase.from("likes").delete().eq("user_id", currentUserId).eq("post_id", postId);
   } else {
-    // Adiciona Like
     await supabase.from("likes").insert({ user_id: currentUserId, post_id: postId });
   }
 
-  revalidatePath("/"); // Atualiza a home
-  revalidatePath(`/post/${postId}`); // Atualiza o post (se existisse página individual)
+  revalidatePath("/");
 }
 
-// --- COMENTÁRIOS ---
-
-export async function addComment(postId: string, content: string, currentUserId: string) {
+export async function toggleCommentLike(commentId: string, currentUserId: string) {
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,13 +36,16 @@ export async function addComment(postId: string, content: string, currentUserId:
     { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
   );
 
-  if (!content.trim()) return;
+  const { data: existingLike } = await supabase
+    .from("comment_likes")
+    .select("*")
+    .eq("user_id", currentUserId)
+    .eq("comment_id", commentId)
+    .single();
 
-  await supabase.from("comments").insert({
-    user_id: currentUserId,
-    post_id: postId,
-    content: content
-  });
-
-  revalidatePath("/");
+  if (existingLike) {
+    await supabase.from("comment_likes").delete().eq("user_id", currentUserId).eq("comment_id", commentId);
+  } else {
+    await supabase.from("comment_likes").insert({ user_id: currentUserId, comment_id: commentId });
+  }
 }

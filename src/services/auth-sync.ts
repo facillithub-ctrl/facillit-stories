@@ -1,78 +1,67 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { User } from "@supabase/supabase-js";
+import { SupabaseClient, User } from "@supabase/supabase-js";
 
-// Definição estrita dos tipos (Zero 'any')
-interface HubProfile {
-  id: string; // Auth ID
-  facillit_id: string;
-  nickname: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  bio: string | null;
-  user_category: string | null;
-  verification_badge: string | null;
-}
-
-/**
- * Sincroniza o perfil do Hub para o banco local do Stories.
- * Deve ser chamado no Layout ou Page principal.
- */
 export async function syncUserProfile(
   user: User, 
   hubClient: SupabaseClient, 
   storiesClient: SupabaseClient
-): Promise<void> {
+) {
+  if (!user || !user.id) return;
+
   try {
-    // 1. Verifica se o perfil JÁ existe no banco local (Stories)
+    // 1. Verifica se já existe
     const { data: localProfile } = await storiesClient
       .from("profiles")
-      .select("updated_at")
+      .select("user_id")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
-    // Se já existe e foi atualizado recentemente, não faz nada (Cache de 1 hora, por exemplo, ou simples existência)
-    // Para MVP, se existir, assumimos que está ok. Futuramente podemos comparar datas.
-    if (localProfile) {
-      return;
-    }
+    if (localProfile) return; // Já existe, tudo certo.
 
-    // 2. Se não existe, busca os dados ORIGINAIS no Hub
-    const { data: hubProfile, error: hubError } = await hubClient
+    // 2. Busca dados originais
+    let { data: hubProfile } = await hubClient
       .from("profiles")
-      .select("id, facillit_id, nickname, full_name, avatar_url, bio, user_category, verification_badge")
+      .select("facillit_id, nickname, full_name, avatar_url, bio, user_category, verification_badge")
       .eq("user_id", user.id)
-      .single();
-
-    if (hubError || !hubProfile) {
-      console.error("Erro ao buscar perfil no Hub para sincronia:", hubError);
-      return;
+      .maybeSingle();
+    
+    // Fallback se não achar no Hub
+    if (!hubProfile) {
+         // Tenta busca alternativa ou usa dados padrão
+         hubProfile = {
+            facillit_id: user.id,
+            nickname: user.email?.split('@')[0] || 'admin',
+            full_name: 'Usuário',
+            avatar_url: null,
+            bio: null,
+            user_category: 'leitor',
+            verification_badge: null
+         };
     }
 
-    // 3. Insere/Atualiza no banco local (Stories)
-    // Importante: A tabela 'profiles' no Stories deve ter os mesmos campos.
-    const profileData = hubProfile as HubProfile;
-
+    // 3. Insere no Stories (Garante que a FK funcione)
     const { error: syncError } = await storiesClient
       .from("profiles")
       .upsert({
-        user_id: user.id, // Chave de vínculo
-        facillit_id: profileData.facillit_id,
-        nickname: profileData.nickname,
-        full_name: profileData.full_name,
-        avatar_url: profileData.avatar_url,
-        bio: profileData.bio,
-        user_category: profileData.user_category,
-        verification_badge: profileData.verification_badge,
+        user_id: user.id,
+        facillit_id: String(hubProfile.facillit_id || user.id),
+        nickname: hubProfile.nickname,
+        full_name: hubProfile.full_name,
+        avatar_url: hubProfile.avatar_url,
+        bio: hubProfile.bio,
+        user_category: hubProfile.user_category,
+        verification_badge: hubProfile.verification_badge,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
     if (syncError) {
-      console.error("Erro ao salvar perfil no Stories:", syncError);
+      console.error("[Sync] Erro ao criar perfil local:", syncError.message);
+      throw syncError; // Propaga erro para ser capturado
     } else {
-      console.log(`✅ Perfil sincronizado: ${profileData.nickname}`);
+      console.log("[Sync] Perfil criado/atualizado com sucesso.");
     }
 
   } catch (error) {
-    console.error("Falha crítica na sincronização:", error);
+    console.error("[Sync] Erro crítico:", error);
+    throw error;
   }
 }
