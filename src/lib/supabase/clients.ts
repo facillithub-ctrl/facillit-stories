@@ -1,13 +1,15 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-// 1. Cliente HUB (A conta global - Autenticação e Perfil Base)
-const hubUrl = process.env.NEXT_PUBLIC_HUB_SUPABASE_URL!;
-const hubKey = process.env.NEXT_PUBLIC_HUB_ANON_KEY!;
+// 1. Cliente HUB (Autenticação e Perfil Base)
+// Usamos createBrowserClient para garantir que os cookies sejam setados corretamente
+// e lidos pelo Middleware.
+export const hubClient = createBrowserClient(
+  process.env.NEXT_PUBLIC_HUB_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_HUB_ANON_KEY!
+);
 
-export const hubClient = createClient(hubUrl, hubKey);
-
-// 2. Cliente STORIES (A rede social - Posts, Likes, etc)
-const storiesUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const storiesKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-export const storiesClient = createClient(storiesUrl, storiesKey);
+// 2. Cliente STORIES (Dados da Rede Social)
+export const storiesClient = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);

@@ -1,15 +1,17 @@
-import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { type NextRequest, NextResponse } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  // 1. Cria uma resposta vazia para podermos manipular os headers/cookies
+  // 1. Cria a resposta inicial
+  // Precisamos dela para poder setar/remover cookies durante a verificação
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   });
 
-  // 2. Inicializa o cliente Supabase conectado ao HUB (Fonte da Autenticação)
+  // 2. Cliente Supabase (Conectado ao HUB - onde está a autenticação)
+  // É CRÍTICO que estas variáveis de ambiente estejam corretas no .env.local
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_HUB_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_HUB_ANON_KEY!,
@@ -19,87 +21,66 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          });
+          // Sincroniza o cookie no request (para o passo atual)
+          request.cookies.set({ name, value, ...options });
           response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+            request: { headers: request.headers },
           });
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          });
+          // Sincroniza o cookie na resposta (para o navegador)
+          response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: "",
-            ...options,
-          });
+          request.cookies.set({ name, value: "", ...options });
           response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+            request: { headers: request.headers },
           });
-          response.cookies.set({
-            name,
-            value: "",
-            ...options,
-          });
+          response.cookies.set({ name, value: "", ...options });
         },
       },
     }
   );
 
-  // 3. Verifica o usuário (refreshing session if needed)
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // 3. Verifica a sessão
+  // Isso chama o Supabase para validar o token contido nos cookies
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
+  // 4. Lógica de Redirecionamento
+  const url = request.nextUrl.clone();
+  const pathname = url.pathname;
 
-  // Definição de Rotas
-  const isAuthRoute = pathname.startsWith("/login");
-  const isProtectedRoute = 
-    pathname === "/" || 
-    pathname.startsWith("/settings") || 
-    pathname.startsWith("/library") ||
-    pathname.startsWith("/forums");
+  // Definição das rotas
+  const isLoginPage = pathname === "/login";
+  
+  // Rotas que NÃO precisam de autenticação (Públicas)
+  // Adicione aqui qualquer rota que deva ser acessível sem login
+  const isPublicRoute = 
+    pathname.startsWith("/u/") || // Perfis públicos
+    pathname === "/login" ||      // A própria página de login
+    pathname === "/master-login"; // (Se ainda existir)
 
-  // CENÁRIO 1: Usuário NÃO logado tenta acessar rota protegida
-  if (isProtectedRoute && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    // Opcional: Salvar a URL original para redirecionar de volta depois
-    // url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
-  }
-
-  // CENÁRIO 2: Usuário LOGADO tenta acessar página de login
-  if (isAuthRoute && user) {
-    const url = request.nextUrl.clone();
+  // CASO A: Usuário JÁ LOGADO tentando acessar a página de LOGIN
+  // Ação: Manda para a Home (Dashboard)
+  if (user && isLoginPage) {
     url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
-  // Permite o acesso
+  // CASO B: Usuário NÃO LOGADO tentando acessar rota PRIVADA
+  // Ação: Manda para o Login
+  if (!user && !isPublicRoute) {
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  // Se nada acima acontecer, permite a navegação normal
   return response;
 }
 
-// Configuração: Define quais rotas ativam o middleware
 export const config = {
   matcher: [
     /*
-     * Corresponde a todos os caminhos de solicitação, exceto:
-     * 1. /api/ (rotas de API)
-     * 2. /_next/ (arquivos estáticos do Next.js)
-     * 3. /static (arquivos estáticos dentro da pasta public)
-     * 4. arquivos com extensão (favicon.ico, imagens, etc)
+     * Ignora rotas internas do Next.js e arquivos estáticos
+     * para não sobrecarregar o middleware
      */
     "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
