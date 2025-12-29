@@ -20,7 +20,69 @@ export interface ChatUser {
   avatar_url: string | null;
 }
 
-// Enviar mensagem
+export interface InboxItem {
+  contact: ChatUser;
+  lastMessage: Message;
+  unreadCount: number;
+}
+
+// --- NOVAS FUNÇÕES ---
+
+// Buscar Inbox (Lista de Conversas)
+export async function fetchInbox() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  // 1. Busca a última mensagem de cada conversa via View
+  const { data: conversations, error } = await supabase
+    .from("inbox_view")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error || !conversations) {
+    console.error("Erro ao buscar inbox:", error);
+    return [];
+  }
+
+  // 2. Busca os detalhes dos perfis desses contatos
+  const contactIds = conversations.map(c => c.conversation_partner);
+  
+  if (contactIds.length === 0) return [];
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("user_id, nickname, avatar_url")
+    .in("user_id", contactIds);
+
+  // 3. Monta o objeto final combinando dados
+  const inboxItems: InboxItem[] = conversations.map(conv => {
+    const profile = profiles?.find(p => p.user_id === conv.conversation_partner);
+    
+    return {
+      contact: {
+        id: conv.conversation_partner,
+        nickname: profile?.nickname || "Usuário Desconhecido",
+        avatar_url: profile?.avatar_url || null
+      },
+      lastMessage: {
+        id: conv.message_id,
+        content: conv.content,
+        sender_id: conv.sender_id,
+        receiver_id: conv.owner_id === conv.sender_id ? conv.conversation_partner : conv.owner_id,
+        created_at: conv.created_at,
+        read_at: conv.read_at
+      },
+      unreadCount: (conv.sender_id !== user.id && !conv.read_at) ? 1 : 0 
+      // Nota: Para contagem exata de unread, precisaríamos de outra query, 
+      // mas para MVP isso indica se a ÚLTIMA é não lida.
+    };
+  });
+
+  return inboxItems;
+}
+
+// --- FUNÇÕES EXISTENTES (Mantidas) ---
+
 export async function sendMessage(content: string, receiverId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Não autenticado");
@@ -32,7 +94,6 @@ export async function sendMessage(content: string, receiverId: string) {
   }).select().single();
 }
 
-// Buscar mensagens entre dois usuários
 export async function fetchMessages(otherUserId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -46,7 +107,6 @@ export async function fetchMessages(otherUserId: string) {
   return (data as Message[]) || [];
 }
 
-// Marcar como lidas
 export async function markAsRead(otherUserId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;

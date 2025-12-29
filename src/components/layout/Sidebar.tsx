@@ -6,21 +6,19 @@ import { usePathname } from "next/navigation";
 import { 
   LayoutDashboard, 
   Library, 
-  MessageSquare, 
-  Users, 
+  MessageSquare, // Ícone de Mensagem
   Settings, 
   Sparkles, 
   LogOut, 
   Menu, 
   X, 
   ShieldAlert,
-  Bell, // Importado
+  Bell, 
   LucideIcon 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { User } from "@supabase/supabase-js";
 
-// ... (Resto das constantes ADMIN_ID e interfaces mantidas iguais) ...
 const ADMIN_ID = "06ba69b6-807c-45a5-aad9-2013fe6edf3e";
 
 interface SidebarProps {
@@ -45,8 +43,8 @@ export function Sidebar({ user }: SidebarProps) {
 
   return (
     <>
-      {/* ... (Mobile Header mantido igual) ... */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 z-50">
+      {/* Mobile Header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 z-40">
         <span className="font-bold text-lg text-brand-purple tracking-tight">Facillit.</span>
         <button onClick={() => setIsMobileOpen(!isMobileOpen)} className="p-2 text-gray-600">
           {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -77,10 +75,9 @@ export function Sidebar({ user }: SidebarProps) {
             <h3 className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Principal</h3>
             <nav className="space-y-1">
               <NavItem href="/" icon={LayoutDashboard} label="Feed" isActive={pathname === "/"} onClick={() => setIsMobileOpen(false)} />
-              
-              {/* NOVA ABA DE NOTIFICAÇÕES */}
               <NavItem href="/notifications" icon={Bell} label="Notificações" isActive={pathname === "/notifications"} onClick={() => setIsMobileOpen(false)} />
-              
+              {/* NOVA OPÇÃO: MENSAGENS */}
+              <NavItem href="/messages" icon={MessageSquare} label="Mensagens" isActive={pathname.startsWith("/messages")} onClick={() => setIsMobileOpen(false)} />
               <NavItem href="/library" icon={Library} label="Biblioteca" isActive={pathname === "/library"} onClick={() => setIsMobileOpen(false)} />
             </nav>
           </div>
@@ -92,13 +89,13 @@ export function Sidebar({ user }: SidebarProps) {
             </div>
           )}
 
-          {/* ... (AI Card e outras seções mantidas) ... */}
-          <div className="p-4 rounded-xl bg-gradient-to-br from-[#F5F3FF] to-white border border-[#E9E5F3] shadow-sm cursor-pointer">
+          {/* AI Section */}
+          <div className="p-4 rounded-xl bg-gradient-to-br from-[#F5F3FF] to-white border border-[#E9E5F3] shadow-sm cursor-pointer hover:shadow-md transition-all">
              <div className="flex items-center gap-2 mb-2">
                 <Sparkles size={14} className="text-brand-purple" />
                 <span className="text-xs font-bold text-gray-900">Facillit AI</span>
              </div>
-             <p className="text-[11px] text-gray-500 mb-2">Seu copiloto literário.</p>
+             <p className="text-[11px] text-gray-500 mb-2 leading-snug">Seu copiloto literário para resumos e análises.</p>
           </div>
 
           <div>
@@ -113,8 +110,8 @@ export function Sidebar({ user }: SidebarProps) {
         {/* Footer */}
         <div className="p-4 border-t border-gray-50 bg-white">
            <div className="flex items-center gap-3 p-2.5 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-white hover:shadow-sm transition-all">
-              <div className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-700 shrink-0">
-                 {user.email?.charAt(0).toUpperCase()}
+              <div className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-700 shrink-0 uppercase">
+                 {user.email?.charAt(0)}
               </div>
               <div className="flex-1 overflow-hidden">
                  <p className="text-xs font-bold text-gray-900 truncate">Minha Conta</p>
@@ -129,14 +126,13 @@ export function Sidebar({ user }: SidebarProps) {
   );
 }
 
-// Subcomponente NavItem (igual ao anterior)
 function NavItem({ href, icon: Icon, label, isActive, className, onClick }: NavItemProps) {
   return (
     <Link
       href={href}
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group",
+        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative",
         isActive ? "bg-brand-purple/5 text-brand-purple shadow-sm ring-1 ring-brand-purple/10" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
         className
       )}
