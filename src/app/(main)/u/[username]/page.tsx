@@ -5,12 +5,9 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
-// Utils e Componentes
 import { getProfileByUsername } from "@/services/profile";
-import { Shell } from "@/components/layout/Shell"; // Uso correto do Shell
 import { VerificationBadge } from "@/components/ui/VerificationBadge"; 
 import { Calendar, Share2, BookOpen, Edit3, MessageCircle } from "lucide-react";
-import { cn } from "@/lib/utils"; // Importado para segurança, caso precise
 
 interface ProfilePageProps {
   params: Promise<{ username: string }>;
@@ -55,14 +52,9 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     }
   }
 
-  // --- ARQUITETURA SPA ---
-  // Usamos o Shell aqui. O Next.js é inteligente o suficiente para não recarregar
-  // a Sidebar inteira se a estrutura for idêntica à da página anterior,
-  // mas para persistência 100% perfeita, recomenda-se usar Layout Groups (ver nota abaixo).
   return (
-    <Shell user={currentUser}>
-        
-        {/* Header Profile */}
+    // SEM SHELL - Conteúdo direto
+    <>
         <div className="relative animate-in fade-in duration-500">
             {/* Capa */}
             <div className="h-40 md:h-64 w-full relative bg-gray-50 group">
@@ -178,7 +170,6 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 <p className="text-sm text-gray-400 font-bold">Nenhuma atividade pública.</p>
             </div>
         </div>
-
-    </Shell>
+    </>
   );
 }

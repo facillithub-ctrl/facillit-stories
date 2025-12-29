@@ -1,7 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { Shell } from "@/components/layout/Shell";
 import { PostCard, PostWithDetails } from "@/components/feed/PostCard";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -62,11 +61,8 @@ export default async function SinglePostPage({ params }: PageProps) {
   }
 
   return (
-    <Shell user={user}>
-      {/* pt-20: Padding crítico para o mobile header não cobrir o conteúdo 
-         min-h-screen: Garante que o footer não flutue
-      */}
-      <div className="max-w-3xl mx-auto px-4 lg:px-0 min-h-screen pt-20 lg:pt-8 pb-24">
+    // SEM SHELL - Conteúdo direto
+    <div className="max-w-3xl mx-auto px-4 lg:px-0 min-h-screen pt-20 lg:pt-8 pb-24">
         
         {/* Botão Voltar */}
         <div className="mb-6">
@@ -127,6 +123,5 @@ export default async function SinglePostPage({ params }: PageProps) {
             </div>
         </div>
       </div>
-    </Shell>
   );
 }

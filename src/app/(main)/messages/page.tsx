@@ -7,7 +7,6 @@ import { createBrowserClient } from "@supabase/ssr";
 import { User } from "@supabase/supabase-js";
 import { Search, MessageSquarePlus, ChevronRight, Check, CheckCheck } from "lucide-react";
 
-import { Shell } from "@/components/layout/Shell";
 import { fetchInbox, InboxItem } from "@/services/chat";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
@@ -35,11 +34,9 @@ export default function InboxPage() {
 
     loadData();
 
-    // Realtime: Atualizar a lista se houver nova mensagem
     const channel = supabase
       .channel('inbox_realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
-         // Recarrega inbox simples (para MVP é aceitável, em prod faríamos update otimista)
          fetchInbox().then(setInbox);
       })
       .subscribe();
@@ -48,70 +45,65 @@ export default function InboxPage() {
   }, []);
 
   return (
-    <Shell user={currentUser}>
-      <div className="w-full max-w-3xl mx-auto pt-8 px-6 pb-20">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-            <div>
-                <h1 className="text-3xl font-black text-gray-900 tracking-tight">Mensagens</h1>
-                <p className="text-gray-400 text-sm font-medium mt-1">Suas conversas privadas.</p>
-            </div>
-            {/* Botão para nova mensagem (futuramente pode abrir um modal de busca de usuários) */}
-            <button className="w-12 h-12 rounded-full bg-black text-white flex items-center justify-center hover:bg-gray-800 transition-all shadow-lg shadow-black/10">
-                <MessageSquarePlus size={20} />
-            </button>
-        </div>
-
-        {/* Search Bar */}
-        <div className="relative group mb-8">
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 pl-4 pointer-events-none">
-                <Search className="text-gray-300 h-4 w-4 group-focus-within:text-brand-purple transition-colors" />
-            </div>
-            <input 
-              type="text" 
-              placeholder="Buscar nas conversas..." 
-              className="w-full bg-gray-50 border-none rounded-2xl py-3.5 pl-12 pr-4 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-gray-100 transition-all placeholder-gray-400"
-            />
-        </div>
-
-        {/* Lista de Conversas */}
-        <div className="space-y-1">
-            {loading ? (
-                // Skeleton Loading
-                [...Array(5)].map((_, i) => (
-                    <div key={i} className="flex items-center gap-4 py-4 px-2 animate-pulse">
-                        <div className="w-12 h-12 bg-gray-100 rounded-full" />
-                        <div className="flex-1 space-y-2">
-                            <div className="h-3 bg-gray-100 rounded w-1/3" />
-                            <div className="h-2 bg-gray-50 rounded w-2/3" />
-                        </div>
-                    </div>
-                ))
-            ) : inbox.length > 0 ? (
-                inbox.map((item) => (
-                   <InboxItemCard key={item.contact.id} item={item} currentUserId={currentUser?.id} />
-                ))
-            ) : (
-                // Empty State
-                <div className="py-20 text-center flex flex-col items-center">
-                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                        <MessageSquarePlus className="text-gray-300" size={24} />
-                    </div>
-                    <h3 className="text-gray-900 font-bold mb-1">Nenhuma mensagem</h3>
-                    <p className="text-gray-400 text-sm max-w-xs">
-                        Inicie uma conversa visitando o perfil de um leitor.
-                    </p>
-                </div>
-            )}
-        </div>
-
+    // SEM SHELL
+    <div className="w-full max-w-3xl mx-auto pt-8 px-6 pb-20">
+      
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+          <div>
+              <h1 className="text-3xl font-black text-gray-900 tracking-tight">Mensagens</h1>
+              <p className="text-gray-400 text-sm font-medium mt-1">Suas conversas privadas.</p>
+          </div>
+          <button className="w-12 h-12 rounded-full bg-black text-white flex items-center justify-center hover:bg-gray-800 transition-all shadow-lg shadow-black/10">
+              <MessageSquarePlus size={20} />
+          </button>
       </div>
-    </Shell>
+
+      {/* Search Bar */}
+      <div className="relative group mb-8">
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 pl-4 pointer-events-none">
+              <Search className="text-gray-300 h-4 w-4 group-focus-within:text-brand-purple transition-colors" />
+          </div>
+          <input 
+            type="text" 
+            placeholder="Buscar nas conversas..." 
+            className="w-full bg-gray-50 border-none rounded-2xl py-3.5 pl-12 pr-4 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-gray-100 transition-all placeholder-gray-400"
+          />
+      </div>
+
+      {/* Lista de Conversas */}
+      <div className="space-y-1">
+          {loading ? (
+              [...Array(5)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 py-4 px-2 animate-pulse">
+                      <div className="w-12 h-12 bg-gray-100 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                          <div className="h-3 bg-gray-100 rounded w-1/3" />
+                          <div className="h-2 bg-gray-50 rounded w-2/3" />
+                      </div>
+                  </div>
+              ))
+          ) : inbox.length > 0 ? (
+              inbox.map((item) => (
+                 <InboxItemCard key={item.contact.id} item={item} currentUserId={currentUser?.id} />
+              ))
+          ) : (
+              <div className="py-20 text-center flex flex-col items-center">
+                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                      <MessageSquarePlus className="text-gray-300" size={24} />
+                  </div>
+                  <h3 className="text-gray-900 font-bold mb-1">Nenhuma mensagem</h3>
+                  <p className="text-gray-400 text-sm max-w-xs">
+                      Inicie uma conversa visitando o perfil de um leitor.
+                  </p>
+              </div>
+          )}
+      </div>
+
+    </div>
   );
 }
 
-// Subcomponente de Card (Item da Lista)
 function InboxItemCard({ item, currentUserId }: { item: InboxItem, currentUserId?: string }) {
     const isMe = item.lastMessage.sender_id === currentUserId;
     const isUnread = !isMe && !item.lastMessage.read_at;
@@ -122,8 +114,6 @@ function InboxItemCard({ item, currentUserId }: { item: InboxItem, currentUserId
                 "flex items-center gap-4 py-4 px-3 rounded-2xl transition-all border border-transparent",
                 isUnread ? "bg-brand-purple/5 border-brand-purple/10" : "hover:bg-gray-50"
             )}>
-                
-                {/* Avatar */}
                 <div className="relative shrink-0">
                     <div className="w-12 h-12 rounded-full bg-gray-100 relative overflow-hidden border border-gray-100">
                         {item.contact.avatar_url ? (
@@ -134,13 +124,11 @@ function InboxItemCard({ item, currentUserId }: { item: InboxItem, currentUserId
                             </div>
                         )}
                     </div>
-                    {/* Indicador de Online (Simulado ou Realtime futuro) */}
                     {isUnread && (
                         <div className="absolute top-0 right-0 w-3 h-3 bg-brand-purple rounded-full border-2 border-white" />
                     )}
                 </div>
 
-                {/* Conteúdo */}
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-0.5">
                         <h3 className={cn("text-sm truncate", isUnread ? "font-black text-gray-900" : "font-bold text-gray-800")}>
@@ -166,7 +154,6 @@ function InboxItemCard({ item, currentUserId }: { item: InboxItem, currentUserId
                     </div>
                 </div>
 
-                {/* Seta Hover */}
                 <div className="text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity -ml-2">
                     <ChevronRight size={16} />
                 </div>
