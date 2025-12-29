@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState, use } from "react";
 import { createBrowserClient } from "@supabase/ssr";
-import { Send, ArrowLeft, MoreVertical, Check, CheckCheck } from "lucide-react";
+import { Send, ArrowLeft, MoreVertical, Check, CheckCheck, Loader2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { fetchMessages, sendMessage, markAsRead, Message } from "@/services/chat";
+import { fetchMessages, markAsRead, Message } from "@/services/chat";
+import { sendMessageAction } from "@/actions/chat"; 
+import { VerificationBadge } from "@/components/ui/VerificationBadge";
 
 interface PageProps {
     params: Promise<{ userId: string }>;
@@ -15,38 +17,63 @@ interface PageProps {
 export default function ChatPage({ params }: PageProps) {
   const { userId: targetUserId } = use(params);
 
+  // Estados
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [targetUser, setTargetUser] = useState<{ nickname: string, avatar_url: string | null } | null>(null);
+  const [targetUser, setTargetUser] = useState<{ nickname: string, avatar_url: string | null, verification_badge: string | null } | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const supabase = createBrowserClient(
+  // Cliente HUB para Auth e Perfis
+  const hubSupabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_HUB_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_HUB_ANON_KEY!
+  );
+
+  // Cliente STORIES para Realtime
+  const storiesSupabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
+  // 1. Inicialização (Auth + Perfil + Mensagens)
   useEffect(() => {
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser();
+      if (!targetUserId || targetUserId === 'undefined') return;
+
+      // Pegar usuário logado no HUB
+      const { data: { user } } = await hubSupabase.auth.getUser();
       if (!user) return;
       setCurrentUserId(user.id);
 
-      const { data: target } = await supabase.from("profiles").select("nickname, avatar_url").eq("user_id", targetUserId).single();
+      // Buscar perfil do destinatário no HUB (Garante foto correta)
+      const { data: target } = await hubSupabase
+        .from("profiles")
+        .select("nickname, avatar_url, verification_badge")
+        .eq("user_id", targetUserId)
+        .single();
+        
       if (target) setTargetUser(target);
 
+      // Carregar mensagens (Isso vem do Stories via service)
       const initialMsgs = await fetchMessages(targetUserId);
       setMessages(initialMsgs);
+      setLoading(false);
       
       markAsRead(targetUserId);
     }
     init();
   }, [targetUserId]);
 
+  // 2. Realtime (Conecta no Stories DB)
   useEffect(() => {
-    if (!currentUserId) return;
+    if (!currentUserId || !targetUserId) return;
 
-    const channel = supabase
+    const channel = storiesSupabase
       .channel(`chat:${currentUserId}`)
       .on('postgres_changes', { 
         event: 'INSERT', 
@@ -62,96 +89,127 @@ export default function ChatPage({ params }: PageProps) {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); }
+    return () => { storiesSupabase.removeChannel(channel); }
   }, [currentUserId, targetUserId]);
 
+  // 3. Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, loading]);
 
-  const handleSend = async () => {
-    if (!newMessage.trim() || !currentUserId) return;
+  // 4. Enviar
+  const handleSend = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newMessage.trim() || !currentUserId || isSending) return;
     
+    setIsSending(true);
+    const contentToSend = newMessage;
+    setNewMessage(""); 
+    inputRef.current?.focus();
+
+    // UI Otimista
     const tempId = Math.random().toString();
     const tempMsg: Message = {
         id: tempId,
-        content: newMessage,
+        content: contentToSend,
         sender_id: currentUserId,
         receiver_id: targetUserId,
         created_at: new Date().toISOString(),
         read_at: null
     };
-
     setMessages(prev => [...prev, tempMsg]);
-    setNewMessage("");
 
-    await sendMessage(tempMsg.content, targetUserId);
+    // Server Action (Resolve o problema de Auth Cross-DB)
+    const result = await sendMessageAction(contentToSend, targetUserId);
+
+    if (result.error) {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        alert("Erro ao enviar: " + result.error);
+        setNewMessage(contentToSend);
+    }
+    
+    setIsSending(false);
   };
 
+  if (!targetUserId || targetUserId === 'undefined') {
+      return <div className="p-10 text-center text-gray-400">Conversa não encontrada.</div>;
+  }
+
   return (
-    // SEM SHELL
-    <div className="h-[calc(100vh-80px)] lg:h-screen flex flex-col bg-white max-w-4xl mx-auto border-x border-gray-50 shadow-sm">
+    <div className="flex flex-col h-[calc(100vh-theme(spacing.16))] lg:h-screen w-full bg-white relative">
       
-      {/* Header do Chat */}
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-white/80 backdrop-blur sticky top-0 z-10">
-          <div className="flex items-center gap-3">
-              <Link href="/messages" className="lg:hidden p-2 -ml-2 text-gray-400 hover:text-black">
-                  <ArrowLeft size={20} />
+      {/* Header */}
+      <div className="shrink-0 px-6 py-3 border-b border-gray-50 flex items-center justify-between bg-white/90 backdrop-blur-md sticky top-0 z-20">
+          <div className="flex items-center gap-4">
+              <Link href="/messages" className="lg:hidden p-2 -ml-3 text-gray-400 hover:text-black transition-colors">
+                  <ArrowLeft size={22} />
               </Link>
+              
               <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gray-100 relative overflow-hidden border border-gray-100">
+                  <div className="w-10 h-10 rounded-full bg-gray-50 relative overflow-hidden border border-gray-100">
                       {targetUser?.avatar_url ? (
                           <Image src={targetUser.avatar_url} alt="User" fill className="object-cover" />
                       ) : (
-                          <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-300">
-                              {targetUser?.nickname?.[0]}
+                          <div className="w-full h-full flex items-center justify-center text-sm font-bold text-gray-300">
+                              {targetUser?.nickname?.[0]?.toUpperCase()}
                           </div>
                       )}
                   </div>
-                  <div>
-                      <h2 className="text-sm font-bold text-gray-900 leading-tight">
-                          {targetUser?.nickname || "Carregando..."}
-                      </h2>
-                      <span className="text-[10px] text-green-500 font-bold flex items-center gap-1">
-                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Online
-                      </span>
+                  <div className="flex flex-col">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-bold text-gray-900 leading-none">
+                            {targetUser?.nickname || "Carregando..."}
+                        </span>
+                        <VerificationBadge badge={targetUser?.verification_badge} size="xs" />
+                      </div>
+                      <span className="text-[10px] font-medium text-gray-400 mt-0.5">Online agora</span>
                   </div>
               </div>
           </div>
-          <button className="text-gray-300 hover:text-black transition-colors"><MoreVertical size={18} /></button>
+          <button className="text-gray-300 hover:text-black transition-colors p-2">
+              <MoreVertical size={20} />
+          </button>
       </div>
 
       {/* Área de Mensagens */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-white scrollbar-thin scrollbar-thumb-gray-50">
           {messages.map((msg, idx) => {
               const isMe = msg.sender_id === currentUserId;
-              const showAvatar = !isMe && (idx === 0 || messages[idx-1].sender_id !== msg.sender_id);
+              const isFirstInGroup = idx === 0 || messages[idx-1].sender_id !== msg.sender_id;
 
               return (
-                  <div key={msg.id} className={cn("flex w-full", isMe ? "justify-end" : "justify-start")}>
-                      <div className={cn("flex max-w-[75%] gap-2", isMe ? "flex-row-reverse" : "flex-row")}>
+                  <div key={msg.id} className={cn("flex w-full animate-in fade-in slide-in-from-bottom-2 duration-300", isMe ? "justify-end" : "justify-start")}>
+                      <div className={cn("flex max-w-[85%] sm:max-w-[70%] gap-2", isMe ? "flex-row-reverse" : "flex-row")}>
+                          
+                          {/* Avatar apenas na primeira msg do grupo recebido */}
                           {!isMe && (
-                              <div className="w-6 h-6 rounded-full bg-gray-100 overflow-hidden shrink-0 mt-auto opacity-100">
-                                  {showAvatar ? (
-                                      targetUser?.avatar_url && <Image src={targetUser.avatar_url} alt="" width={24} height={24} className="object-cover w-full h-full"/>
-                                  ) : <div className="w-6" />}
+                              <div className="w-8 h-8 shrink-0 flex flex-col justify-end">
+                                  {isFirstInGroup ? (
+                                     <div className="w-8 h-8 rounded-full bg-gray-50 overflow-hidden border border-gray-50 relative">
+                                        {targetUser?.avatar_url && <Image src={targetUser.avatar_url} alt="" fill className="object-cover"/>}
+                                     </div>
+                                  ) : <div className="w-8" />}
                               </div>
                           )}
 
+                          {/* Balão */}
                           <div className={cn(
-                              "px-4 py-2 rounded-2xl text-sm leading-relaxed relative group transition-all",
+                              "px-4 py-2.5 text-[15px] leading-relaxed relative transition-all",
                               isMe 
-                                  ? "bg-brand-purple text-white rounded-br-none shadow-lg shadow-brand-purple/10" 
-                                  : "bg-white text-gray-800 border border-gray-100 rounded-bl-none shadow-sm"
+                                  ? "bg-gradient-to-br from-[#42047e] to-[#6d28d9] text-white rounded-2xl rounded-br-none shadow-sm" 
+                                  : "bg-gray-50 text-gray-800 border border-gray-100/50 rounded-2xl rounded-bl-none",
+                              !isFirstInGroup && isMe && "mt-[-10px] rounded-tr-md",
+                              !isFirstInGroup && !isMe && "mt-[-10px] rounded-tl-md"
                           )}>
                               {msg.content}
+                              
                               <div className={cn(
-                                  "text-[9px] font-medium mt-1 flex items-center gap-1 justify-end opacity-70",
+                                  "text-[9px] font-medium mt-1 flex items-center gap-1 justify-end opacity-80",
                                   isMe ? "text-purple-100" : "text-gray-400"
                               )}>
                                   {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                   {isMe && (
-                                      msg.read_at ? <CheckCheck size={10} /> : <Check size={10} />
+                                      msg.read_at ? <CheckCheck size={11} className="text-[#07f49e]" /> : <Check size={11} />
                                   )}
                               </div>
                           </div>
@@ -159,27 +217,31 @@ export default function ChatPage({ params }: PageProps) {
                   </div>
               )
           })}
-          <div ref={scrollRef} />
+          <div ref={scrollRef} className="h-px" />
       </div>
 
-      {/* Input */}
-      <div className="p-4 bg-white border-t border-gray-50">
-          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-full border border-gray-100 focus-within:border-gray-200 focus-within:bg-white transition-colors shadow-sm">
+      {/* Input Area */}
+      <div className="shrink-0 p-4 bg-white border-t border-gray-50">
+          <form 
+            onSubmit={handleSend}
+            className="flex items-center gap-3 bg-gray-50/50 p-1.5 pl-5 rounded-full border border-gray-100 focus-within:border-[#42047e]/20 focus-within:bg-white focus-within:shadow-lg focus-within:shadow-[#42047e]/5 transition-all duration-300"
+          >
               <input 
-                  className="flex-1 bg-transparent border-none focus:ring-0 text-sm px-4 py-2 placeholder-gray-400"
-                  placeholder="Digite sua mensagem..."
+                  ref={inputRef}
+                  className="flex-1 bg-transparent border-none focus:ring-0 text-[15px] placeholder-gray-400 text-gray-900 h-10"
+                  placeholder="Escreva uma mensagem..."
                   value={newMessage}
                   onChange={e => setNewMessage(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSend()}
+                  disabled={isSending}
               />
               <button 
-                  onClick={handleSend}
-                  disabled={!newMessage.trim()}
-                  className="p-2.5 bg-black text-white rounded-full hover:bg-gray-800 disabled:opacity-50 disabled:scale-90 transition-all"
+                  type="submit"
+                  disabled={!newMessage.trim() || isSending}
+                  className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center hover:bg-[#42047e] hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 disabled:bg-gray-200 shadow-md"
               >
-                  <Send size={16} />
+                  {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} className="ml-0.5" />}
               </button>
-          </div>
+          </form>
       </div>
 
     </div>
