@@ -1,58 +1,54 @@
 import "server-only";
 import admin from "firebase-admin";
 
-interface NotificationPayload {
-  title: string;
-  body: string;
-}
-
 function initFirebase() {
   if (!admin.apps.length) {
     try {
-      // Tenta pegar o JSON completo da variável de ambiente (Recomendado para Vercel)
-      const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT 
-        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT) 
-        : null;
+      const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
 
-      if (serviceAccount) {
+      if (rawServiceAccount) {
+        // Tenta fazer o parse do JSON
+        let serviceAccount;
+        try {
+            serviceAccount = JSON.parse(rawServiceAccount);
+        } catch (e) {
+            console.error("❌ Erro de JSON no .env do Firebase. Verifique as aspas.");
+            return null;
+        }
+
+        // --- CORREÇÃO CRÍTICA DA CHAVE PRIVADA ---
+        // Transforma os caracteres literais "\n" em quebras de linha reais
+        if (serviceAccount.private_key) {
+          serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+        }
+
         admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
         });
+        
+        console.log("🔥 Firebase Admin conectado!");
       } else {
-        // Fallback: Tenta usar a estratégia padrão (GOOGLE_APPLICATION_CREDENTIALS ou metadata server)
-        // Isso funciona se você estiver hospedando no Google Cloud (App Engine, Cloud Run)
-        admin.initializeApp({
-          credential: admin.credential.applicationDefault(),
-        });
+        console.warn("⚠️ Aviso: FIREBASE_SERVICE_ACCOUNT vazio. Notificações desativadas.");
       }
-      console.log("🔥 Firebase Admin inicializado com sucesso!");
-    } catch (error) {
-      console.error("⚠️ Erro ao iniciar Firebase Admin:", error);
+    } catch (error: any) {
+      // Captura o erro "Invalid PEM" e impede que o site caia
+      console.error("⚠️ Erro na chave do Firebase (PEM):", error.message);
+      return null;
     }
   }
-  return admin;
+  
+  return admin.apps.length ? admin : null;
 }
 
 export async function sendPushNotification(userId: string, title: string, body: string) {
   const firebase = initFirebase();
-  
-  // Em um cenário real, você buscaria o token FCM do usuário no banco:
-  // const { data } = await supabase.from('profiles').select('fcm_token').eq('user_id', userId).single();
-  // const fcmToken = data?.fcm_token;
 
-  console.log(`[PUSH MOCK] Enviando para ${userId}: "${title}" - "${body}"`);
-
-  // Código para envio real (descomente quando tiver a lógica de tokens no frontend):
-  /*
-  if (fcmToken) {
-    try {
-      await firebase.messaging().send({
-        token: fcmToken,
-        notification: { title, body },
-      });
-    } catch (e) {
-      console.error("Erro ao enviar FCM:", e);
-    }
+  if (!firebase) {
+    // Modo Mock se a conexão falhar
+    console.log(`[MOCK NOTIFICATION] Para: ${userId} | ${title}`);
+    return;
   }
-  */
+
+  // Aqui entraria o envio real...
+  console.log(`[FIREBASE REAL] Tentando enviar para: ${userId}`);
 }
