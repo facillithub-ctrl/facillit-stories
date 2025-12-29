@@ -4,35 +4,40 @@ import admin from "firebase-admin";
 function initFirebase() {
   if (!admin.apps.length) {
     try {
-      const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+      let serviceAccount;
 
-      if (rawServiceAccount) {
-        // Tenta fazer o parse do JSON
-        let serviceAccount;
+      // 1. Tenta estratégia JSON (Antiga)
+      const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+      if (rawJson) {
         try {
-            serviceAccount = JSON.parse(rawServiceAccount);
-        } catch (e) {
-            console.error("❌ Erro de JSON no .env do Firebase. Verifique as aspas.");
-            return null;
-        }
+          serviceAccount = JSON.parse(rawJson);
+        } catch (e) { /* Ignora erro de JSON */ }
+      }
 
-        // --- CORREÇÃO CRÍTICA DA CHAVE PRIVADA ---
-        // Transforma os caracteres literais "\n" em quebras de linha reais
-        if (serviceAccount.private_key) {
-          serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-        }
+      // 2. Tenta estratégia Variáveis Individuais (Nova e Mais Segura)
+      if (!serviceAccount && process.env.FIREBASE_PRIVATE_KEY) {
+        serviceAccount = {
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY,
+        };
+      }
+
+      if (serviceAccount && serviceAccount.privateKey) {
+        // CORREÇÃO CRÍTICA: Garante que \\n (texto) vire \n (nova linha real)
+        serviceAccount.privateKey = serviceAccount.privateKey.replace(/\\n/g, '\n');
 
         admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
         });
         
-        console.log("🔥 Firebase Admin conectado!");
+        console.log("🔥 Firebase Admin conectado (Variáveis Individuais)!");
       } else {
-        console.warn("⚠️ Aviso: FIREBASE_SERVICE_ACCOUNT vazio. Notificações desativadas.");
+        console.warn("⚠️ Aviso: Credenciais do Firebase incompletas. Usando Mock.");
       }
+
     } catch (error: any) {
-      // Captura o erro "Invalid PEM" e impede que o site caia
-      console.error("⚠️ Erro na chave do Firebase (PEM):", error.message);
+      console.error("⚠️ Erro Firebase:", error.message);
       return null;
     }
   }
@@ -44,11 +49,11 @@ export async function sendPushNotification(userId: string, title: string, body: 
   const firebase = initFirebase();
 
   if (!firebase) {
-    // Modo Mock se a conexão falhar
-    console.log(`[MOCK NOTIFICATION] Para: ${userId} | ${title}`);
+    console.log(`[MOCK PUSH] Para: ${userId} | ${title}`);
     return;
   }
 
-  // Aqui entraria o envio real...
+  // Aqui entraria o envio real se tivéssemos o token do usuário
+  // const messaging = firebase.messaging();
   console.log(`[FIREBASE REAL] Tentando enviar para: ${userId}`);
 }
