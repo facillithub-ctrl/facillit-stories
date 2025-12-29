@@ -1,4 +1,4 @@
-// Definições exatas do que vem do banco de dados
+// Definições de Perfil (Profile)
 export interface Profile {
   id: string;
   nickname: string | null;
@@ -8,12 +8,12 @@ export interface Profile {
   bio?: string | null;
 }
 
+// Definições para Notificações
 export interface NotificationActor {
   nickname: string | null;
   avatar_url: string | null;
 }
 
-// Tipo exato para o retorno do join do Supabase
 export interface NotificationItem {
   id: string;
   created_at: string;
@@ -22,13 +22,39 @@ export interface NotificationItem {
   resource_id: string | null;
   actor_id: string;
   recipient_id: string;
-  actor: NotificationActor | null; // Pode vir nulo se o usuário foi deletado
+  actor: NotificationActor | null; // Pode ser null se user for deletado
 }
 
-// Tipagem para as Abas (evita o uso de string genérica)
 export type NotificationTab = 'all' | 'likes' | 'comments';
 
 export interface TabConfig {
   id: NotificationTab;
   label: string;
+}
+
+// Definições para Comentários (Aqui está a interface que faltava)
+export interface CommentWithProfile {
+  id: string;
+  content: string;
+  created_at: string;
+  user_id: string;
+  post_id: string;
+  profiles: Profile | null;
+  comment_likes: { user_id: string }[];
+}
+
+// Definições para Posts
+export interface PostData {
+  id: string;
+  created_at: string;
+  content: string;
+  title: string | null;
+  image_url: string | null;
+  user_id: string;
+  is_official: boolean;
+  allow_comments: boolean;
+  priority_level?: number;
+  profiles: Profile | null;
+  likes: { user_id: string }[];
+  comments: { count: number }[];
 }
