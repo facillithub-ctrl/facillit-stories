@@ -10,7 +10,7 @@ import { Calendar, UserPlus, MessageCircle, Settings, Share2, BookOpen } from "l
 
 // Tipagem dos parâmetros da rota
 interface ProfilePageProps {
-  params: Promise<{ username: string }>; // Params é Promise no Next 15
+  params: Promise<{ username: string }>;
 }
 
 // SEO Dinâmico
@@ -28,17 +28,16 @@ export async function generateMetadata({ params }: ProfilePageProps): Promise<Me
 }
 
 export default async function ProfilePage({ params }: ProfilePageProps) {
-  // 1. Aguarda os parâmetros da rota (Next.js 15)
   const { username } = await params;
   
-  // 2. Busca os dados do perfil VISITADO (Público)
+  // 1. Busca os dados do perfil VISITADO (Público)
   const profile = await getProfileByUsername(username);
 
   if (!profile) {
     notFound();
   }
 
-  // 3. Busca o usuário LOGADO (com await cookies)
+  // 2. Busca o usuário LOGADO (Server-side Auth)
   const cookieStore = await cookies();
   
   const supabase = createServerClient(
@@ -53,19 +52,35 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
   const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-  // 4. Determina o Status da Relação
+  // 3. Determina o Status da Relação (Visitante vs Dono)
   const isLoggedIn = !!currentUser;
   
   let isOwner = false;
   if (currentUser) {
-     const { data: myProfile } = await supabase
-        .from("profiles")
-        .select("facillit_id")
-        .eq("user_id", currentUser.id)
-        .single();
-     
-     if (myProfile && myProfile.facillit_id === profile.facillit_id) {
-         isOwner = true;
+     // Verifica se o ID do perfil visitado bate com o ID do usuário logado
+     // Como sua tabela usa 'id' ou 'user_id', validamos pelo facillit_id que é único
+     if (currentUser.id && profile.facillit_id) {
+         // Busca simples para confirmar ownership
+         const { data: myProfile } = await supabase
+            .from("profiles")
+            .select("facillit_id")
+            .eq("id", currentUser.id) // Ajuste baseado nos seus logs (busca por ID direto)
+            .maybeSingle(); // maybeSingle evita erro se não achar na primeira tentativa
+         
+         // Se não achou por ID, tenta por user_id (fallback)
+         if (!myProfile) {
+             const { data: myProfileByUserId } = await supabase
+                .from("profiles")
+                .select("facillit_id")
+                .eq("user_id", currentUser.id)
+                .maybeSingle();
+             
+             if (myProfileByUserId && myProfileByUserId.facillit_id === profile.facillit_id) {
+                 isOwner = true;
+             }
+         } else if (myProfile.facillit_id === profile.facillit_id) {
+             isOwner = true;
+         }
      }
   }
 
@@ -81,6 +96,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
             {/* Capa */}
             <div className="h-48 md:h-60 w-full relative bg-gray-50 overflow-hidden group">
                 {profile.cover_url ? (
+                   // CORREÇÃO AQUI: <Image /> em vez de <image>
                    <Image 
                      src={profile.cover_url} 
                      alt="Capa" 
@@ -91,7 +107,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 ) : (
                    <div className="w-full h-full bg-brand-gradient opacity-90" />
                 )}
-                {/* Botão de editar capa (apenas dono) */}
+                
                 {isOwner && (
                     <button className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70">
                         <Settings size={16} />
@@ -125,7 +141,6 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                         </h1>
                         <p className="text-gray-500 font-medium">@{profile.username}</p>
                         
-                        {/* Bio Curta */}
                         {profile.bio && (
                             <p className="mt-2 text-gray-800 text-sm max-w-xl mx-auto md:mx-0 leading-relaxed line-clamp-2">
                                 {profile.bio}
@@ -143,10 +158,9 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                         </div>
                     </div>
 
-                    {/* --- ACTIONS BAR (Lógica de Interação) --- */}
+                    {/* --- ACTIONS BAR --- */}
                     <div className="flex items-center gap-3 mb-2 w-full md:w-auto justify-center md:justify-end">
                         
-                        {/* Cenário 1: Usuário NÃO Logado */}
                         {!isLoggedIn && (
                             <a href="/login" className="px-6 py-2 bg-brand-purple text-white font-medium rounded-full hover:bg-brand-purple/90 transition-all text-sm shadow-sm flex items-center gap-2">
                                 <UserPlus size={16} />
@@ -154,7 +168,6 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                             </a>
                         )}
 
-                        {/* Cenário 2: Usuário Logado vendo OUTRO perfil */}
                         {isLoggedIn && !isOwner && (
                             <>
                                 <button className="px-6 py-2 bg-black text-white font-medium rounded-full hover:bg-gray-800 transition-all text-sm shadow-sm flex items-center gap-2">
@@ -167,32 +180,30 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                             </>
                         )}
 
-                        {/* Cenário 3: Dono do Perfil */}
                         {isOwner && (
                             <a href="/settings" className="px-6 py-2 border border-gray-300 text-gray-700 font-medium rounded-full hover:bg-gray-50 transition-all text-sm shadow-sm flex items-center gap-2">
                                 <Settings size={16} />
-                                Editar Perfil
+                                Editar
                             </a>
                         )}
 
-                        {/* Botão Comum: Compartilhar */}
-                        <button className="p-2 border border-gray-200 text-gray-600 rounded-full hover:bg-gray-50 transition-colors" title="Compartilhar Perfil">
+                        <button className="p-2 border border-gray-200 text-gray-600 rounded-full hover:bg-gray-50 transition-colors">
                             <Share2 size={20} />
                         </button>
                     </div>
                 </div>
 
-                {/* Estatísticas (Stories Data) */}
+                {/* Estatísticas */}
                 <div className="flex gap-8 mt-8 border-t border-gray-100 pt-6 justify-center md:justify-start">
-                    <div className="text-center md:text-left cursor-pointer hover:opacity-70 transition-opacity">
+                    <div className="text-center md:text-left cursor-pointer hover:opacity-70">
                         <span className="block font-bold text-black text-xl">{profile.stats.books_read}</span>
                         <span className="text-gray-500 text-xs uppercase tracking-wide">Livros</span>
                     </div>
-                    <div className="text-center md:text-left cursor-pointer hover:opacity-70 transition-opacity">
+                    <div className="text-center md:text-left cursor-pointer hover:opacity-70">
                         <span className="block font-bold text-black text-xl">{profile.stats.followers}</span>
                         <span className="text-gray-500 text-xs uppercase tracking-wide">Seguidores</span>
                     </div>
-                    <div className="text-center md:text-left cursor-pointer hover:opacity-70 transition-opacity">
+                    <div className="text-center md:text-left cursor-pointer hover:opacity-70">
                         <span className="block font-bold text-black text-xl">{profile.stats.following}</span>
                         <span className="text-gray-500 text-xs uppercase tracking-wide">Seguindo</span>
                     </div>
@@ -200,26 +211,14 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
             </div>
         </div>
 
-        {/* --- FEED AREA (Stories Content) --- */}
+        {/* --- FEED --- */}
         <div className="flex-1 bg-white max-w-5xl mx-auto w-full px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* Coluna Principal: Posts e Atividades */}
             <div className="lg:col-span-2 space-y-6">
-                
-                {/* Tabs de Navegação */}
                 <div className="flex items-center gap-6 border-b border-gray-100 mb-6">
-                    <button className="py-2 border-b-2 border-brand-purple font-semibold text-black text-sm">
-                        Feed
-                    </button>
-                    <button className="py-2 border-b-2 border-transparent text-gray-500 hover:text-black transition-colors text-sm">
-                        Estantes
-                    </button>
-                    <button className="py-2 border-b-2 border-transparent text-gray-500 hover:text-black transition-colors text-sm">
-                        Resenhas
-                    </button>
+                    <button className="py-2 border-b-2 border-brand-purple font-semibold text-black text-sm">Feed</button>
+                    <button className="py-2 border-b-2 border-transparent text-gray-500 hover:text-black transition-colors text-sm">Estantes</button>
                 </div>
 
-                {/* Empty State / Placeholder Feed */}
                 <div className="flex flex-col items-center justify-center py-16 px-4 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-center">
                     <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
                         <BookOpen className="text-gray-300" size={24} />
@@ -227,40 +226,30 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     <h3 className="text-gray-900 font-medium mb-1">Ainda não há publicações</h3>
                     <p className="text-gray-500 text-sm max-w-xs">
                         {isOwner 
-                            ? "Compartilhe sua leitura atual ou escreva uma resenha para começar." 
-                            : `${profile.username} ainda não publicou nada no Facillit Stories.`}
+                            ? "Compartilhe sua leitura atual para começar." 
+                            : `${profile.username} ainda não publicou nada.`}
                     </p>
-                    {isOwner && (
-                        <button className="mt-4 text-brand-purple font-medium text-sm hover:underline">
-                            Criar primeira postagem
-                        </button>
-                    )}
                 </div>
             </div>
 
-            {/* Coluna Lateral: Metas e Detalhes (Stories Data) */}
             <aside className="hidden lg:block space-y-6">
                 <div className="p-6 rounded-xl border border-gray-100 bg-white shadow-sm">
                     <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <span className="w-1 h-4 bg-brand-green rounded-full"/>
                         Meta de Leitura
                     </h3>
-                    {/* Placeholder Meta */}
                     <div className="space-y-3">
                         <div className="flex justify-between text-sm text-gray-600">
                             <span>Anual</span>
-                            <span className="font-medium text-black">0 / 12 livros</span>
+                            <span className="font-medium text-black">0 / 12</span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
                             <div className="bg-brand-green h-2 rounded-full w-[5%]" />
                         </div>
-                        <p className="text-xs text-gray-400">Iniciante na jornada.</p>
                     </div>
                 </div>
             </aside>
-
         </div>
-
       </main>
     </div>
   );
