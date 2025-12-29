@@ -9,32 +9,36 @@ import { cn } from "@/lib/utils";
 interface ShellProps {
   children: React.ReactNode;
   user: User | null;
-  // A prop manual continua existindo para overrides, mas não é mais obrigatória
+  // Mantemos a prop opcional para forçar a exibição se necessário (ex: página de perfil)
   showContextBar?: boolean;
 }
 
-export function Shell({ children, user, showContextBar = false }: ShellProps) {
+export function Shell({ children, user, showContextBar }: ShellProps) {
   const pathname = usePathname();
   
-  // Regra: Mostra ContextBar se for passado via prop OU se estiver na Home (Dashboard)
+  // REGRA DE OURO: Mostra a ContextBar se:
+  // 1. Foi forçado via prop (showContextBar={true})
+  // 2. OU se estamos na raiz (Dashboard) "/"
   const isDashboard = pathname === "/";
-  const shouldShowContextBar = user && (showContextBar || isDashboard);
+  const shouldShowContextBar = user && (showContextBar === true || isDashboard);
 
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900">
       
-      {/* 1ª Coluna: Sidebar */}
+      {/* 1. Sidebar (Esquerda) - Só renderiza se tiver user */}
       <Sidebar user={user} />
       
-      {/* 3ª Coluna: ContextBar (Renderização Condicional) */}
+      {/* 3. ContextBar (Direita) - Renderização Condicional Inteligente */}
       {shouldShowContextBar && <ContextBar />}
 
-      {/* 2ª Coluna: Conteúdo Central */}
+      {/* 2. Conteúdo Central (Meio) */}
       <main 
         className={cn(
           "min-h-screen transition-all duration-300 flex flex-col relative z-0",
+          // Se tem usuário, empurra conteúdo para a direita para não ficar baixo da Sidebar
           user ? "lg:pl-64" : "w-full",
-          shouldShowContextBar ? "xl:pr-80" : "" // Abre espaço para a 3ª coluna
+          // Se tem ContextBar, empurra conteúdo para a esquerda (em telas grandes)
+          shouldShowContextBar ? "xl:pr-80" : "" 
         )}
       >
         {children}
