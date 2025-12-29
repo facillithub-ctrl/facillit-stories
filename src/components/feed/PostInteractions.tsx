@@ -1,113 +1,113 @@
 "use client";
 
 import { useState } from "react";
-import { Heart, MessageSquare, Bookmark, Send } from "lucide-react";
-import { toggleLike, addComment } from "@/actions/interactions";
+import { Heart, MessageSquare, Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toggleLike } from "@/actions/interactions";
+import { CommentsModal } from "./CommentsModal";
 
 interface PostInteractionsProps {
   postId: string;
-  userId: string;
+  postOwnerId: string; // Necessário para notificar o dono do post
+  currentUserId: string;
+  currentUserAvatar?: string | null;
   initialLikesCount: number;
   initialCommentsCount: number;
-  isLikedByMe: boolean;
-  commentsEnabled: boolean;
+  initialIsLiked: boolean;
+  allowComments: boolean;
 }
 
-export function PostInteractions({ 
-  postId, 
-  userId, 
-  initialLikesCount, 
-  initialCommentsCount, 
-  isLikedByMe,
-  commentsEnabled
+export function PostInteractions({
+  postId,
+  postOwnerId,
+  currentUserId,
+  currentUserAvatar,
+  initialLikesCount,
+  initialCommentsCount,
+  initialIsLiked,
+  allowComments
 }: PostInteractionsProps) {
-  
-  // Estado Local (Optimistic UI)
-  const [liked, setLiked] = useState(isLikedByMe);
+  // Estado Local para UI Otimista (Resposta imediata ao clique)
+  const [isLiked, setIsLiked] = useState(initialIsLiked);
   const [likesCount, setLikesCount] = useState(initialLikesCount);
-  const [showCommentBox, setShowCommentBox] = useState(false);
-  const [commentText, setCommentText] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Handler de Like
-  const handleLike = async () => {
-    // Atualiza visualmente na hora
-    const newLikedState = !liked;
-    setLiked(newLikedState);
-    setLikesCount(prev => newLikedState ? prev + 1 : prev - 1);
+  async function handleLike() {
+    // Guarda estado anterior para rollback em caso de erro
+    const previousState = isLiked;
+    const previousCount = likesCount;
 
-    // Chama o server
-    await toggleLike(postId, userId);
-  };
+    // Atualiza a interface instantaneamente
+    setIsLiked(!previousState);
+    setLikesCount(previousState ? previousCount - 1 : previousCount + 1);
 
-  // Handler de Comentário
-  const handleCommentSubmit = async () => {
-    if (!commentText.trim()) return;
-    
-    await addComment(postId, commentText, userId);
-    setCommentText("");
-    setShowCommentBox(false);
-    // Em um app real complexo, atualizaríamos a lista de comentários aqui via prop ou context
-  };
+    try {
+      // Chama a Server Action (Backend)
+      await toggleLike(postId, currentUserId, postOwnerId);
+    } catch (error) {
+      console.error("Erro ao curtir:", error);
+      // Reverte a interface se falhar
+      setIsLiked(previousState);
+      setLikesCount(previousCount);
+    }
+  }
 
   return (
-    <div className="flex flex-col gap-4">
-        {/* Barra de Botões */}
-        <div className="flex items-center gap-6 pt-4 border-t border-gray-100">
-            <button 
-                onClick={handleLike}
-                className="flex items-center gap-2 group transition-colors"
-            >
-                <Heart 
-                    size={20} 
-                    className={cn(
-                        "transition-all duration-300 group-active:scale-90",
-                        liked ? "fill-red-500 text-red-500" : "text-gray-400 group-hover:text-gray-900"
-                    )} 
-                />
-                <span className={cn("text-xs font-bold", liked ? "text-gray-900" : "text-gray-500")}>
-                    {likesCount > 0 ? likesCount : "Curtir"}
-                </span>
-            </button>
+    <>
+      <div className="flex items-center gap-6 pt-1 border-t border-transparent group-hover:border-gray-50 transition-colors">
+        
+        {/* Botão de Like */}
+        <button
+          onClick={handleLike}
+          className="flex items-center gap-1.5 group/btn py-1 transition-all"
+        >
+          <Heart
+            size={18}
+            className={cn(
+              "transition-transform duration-300 group-active/btn:scale-90",
+              isLiked 
+                ? "fill-red-500 text-red-500" 
+                : "text-gray-400 group-hover/btn:text-red-500"
+            )}
+          />
+          <span className={cn(
+            "text-xs font-semibold transition-colors", 
+            isLiked ? "text-red-600" : "text-gray-500"
+          )}>
+            {likesCount > 0 ? likesCount : ""}
+          </span>
+        </button>
 
-            <button 
-                onClick={() => commentsEnabled && setShowCommentBox(!showCommentBox)}
-                disabled={!commentsEnabled}
-                className={cn(
-                    "flex items-center gap-2 group transition-colors",
-                    !commentsEnabled && "opacity-50 cursor-not-allowed"
-                )}
-            >
-                <MessageSquare size={20} className="text-gray-400 group-hover:text-gray-900" />
-                <span className="text-xs font-bold text-gray-500">
-                    {initialCommentsCount > 0 ? initialCommentsCount : "Comentar"}
-                </span>
-            </button>
+        {/* Botão de Comentário */}
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center gap-1.5 group/btn py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!allowComments}
+        >
+          <MessageSquare
+            size={18}
+            className="text-gray-400 group-hover/btn:text-brand-purple transition-colors"
+          />
+          <span className="text-xs font-semibold text-gray-500 group-hover/btn:text-brand-purple">
+            {initialCommentsCount > 0 ? initialCommentsCount : ""}
+          </span>
+        </button>
 
-            <button className="ml-auto text-gray-300 hover:text-brand-purple transition-colors">
-                <Bookmark size={20} />
-            </button>
-        </div>
+        {/* Botão de Salvar (Placeholder funcional) */}
+        <button className="ml-auto text-gray-300 hover:text-black transition-colors">
+          <Bookmark size={18} />
+        </button>
+      </div>
 
-        {/* Caixa de Comentário (Expandable) */}
-        {showCommentBox && (
-            <div className="flex gap-2 animate-in slide-in-from-top-2 fade-in duration-200">
-                <input 
-                    type="text" 
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Escreva sua resposta..."
-                    className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-black"
-                    onKeyDown={(e) => e.key === 'Enter' && handleCommentSubmit()}
-                />
-                <button 
-                    onClick={handleCommentSubmit}
-                    className="p-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors"
-                >
-                    <Send size={16} />
-                </button>
-            </div>
-        )}
-    </div>
+      {/* Modal de Comentários (Carregado sob demanda visual) */}
+      <CommentsModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        postId={postId}
+        postOwnerId={postOwnerId}
+        currentUserId={currentUserId}
+        currentUserAvatar={currentUserAvatar}
+      />
+    </>
   );
 }
