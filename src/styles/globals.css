@@ -38,3 +38,12 @@
 @utility border-subtle {
   @apply border-gray-100;
 }
+
+/* Scrollbar invisível mas funcional */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
