@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { createBrowserClient } from "@supabase/ssr";
+import { User } from "@supabase/supabase-js"; // Importação do tipo correto
 import { Search, MessageSquarePlus, ChevronRight } from "lucide-react";
 import { fetchInbox, InboxItem } from "@/services/chat";
 import { cn, formatRelativeTime } from "@/lib/utils";
@@ -12,7 +13,7 @@ import { VerificationBadge } from "@/components/ui/VerificationBadge";
 export default function InboxPage() {
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null); // Tipagem estrita
 
   const hubSupabase = createBrowserClient(
     process.env.NEXT_PUBLIC_HUB_SUPABASE_URL!,
@@ -23,6 +24,7 @@ export default function InboxPage() {
     async function load() {
       const { data: { user } } = await hubSupabase.auth.getUser();
       setCurrentUser(user);
+      
       if (user) {
          try {
              const data = await fetchInbox();
@@ -70,7 +72,7 @@ export default function InboxPage() {
                                 <div className="flex justify-between">
                                     <span className="font-bold text-gray-900 text-base flex items-center gap-1">
                                         {item.contact.nickname}
-                                        <VerificationBadge badge={item.contact.verification_badge} size="xs" />
+                                        <VerificationBadge badge={item.contact.verification_badge} size="sm" />
                                     </span>
                                     <span className="text-xs text-gray-400 font-medium">{formatRelativeTime(item.lastMessage.created_at)}</span>
                                 </div>

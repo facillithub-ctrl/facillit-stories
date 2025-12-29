@@ -39,21 +39,9 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   const { data: { user: currentUser } } = await supabase.auth.getUser();
   const isLoggedIn = !!currentUser;
   
-  let isOwner = false;
-  if (currentUser && profile.facillit_id) {
-    const { data: myProfile } = await supabase
-        .from("profiles")
-        .select("facillit_id")
-        .eq("user_id", currentUser.id)
-        .maybeSingle();
-
-    if (myProfile?.facillit_id === profile.facillit_id) {
-        isOwner = true;
-    }
-  }
+  const isOwner = currentUser && currentUser.id === profile.user_id;
 
   return (
-    // SEM SHELL - Conteúdo direto
     <>
         <div className="relative animate-in fade-in duration-500">
             {/* Capa */}
