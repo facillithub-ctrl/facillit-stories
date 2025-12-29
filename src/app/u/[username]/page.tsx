@@ -6,102 +6,75 @@ import { createServerClient } from "@supabase/ssr";
 
 import { getProfileByUsername } from "@/services/profile";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Calendar, UserPlus, MessageCircle, Settings, Share2, BookOpen } from "lucide-react";
+import { VerificationBadge } from "@/components/ui/VerificationBadge"; 
+import { Calendar, UserPlus, MessageCircle, Settings, Share2, BookOpen, Edit3, LogIn, MapPin } from "lucide-react";
 
-// Tipagem dos parâmetros da rota
 interface ProfilePageProps {
   params: Promise<{ username: string }>;
 }
 
-// SEO Dinâmico
 export async function generateMetadata({ params }: ProfilePageProps): Promise<Metadata> {
   const { username } = await params;
   const profile = await getProfileByUsername(username);
-  
   if (!profile) return { title: "Perfil não encontrado" };
-
   return {
-    title: `${profile.full_name || profile.username} (@${profile.username}) | Facillit Stories`,
+    title: `${profile.full_name || profile.username} (@${profile.username})`,
     description: profile.bio || `Confira o perfil de leitura de ${profile.username}.`,
-    openGraph: { images: profile.avatar_url ? [profile.avatar_url] : [] },
   };
 }
 
 export default async function ProfilePage({ params }: ProfilePageProps) {
   const { username } = await params;
-  
-  // 1. Busca os dados do perfil VISITADO (Público)
   const profile = await getProfileByUsername(username);
 
-  if (!profile) {
-    notFound();
-  }
+  if (!profile) notFound();
 
-  // 2. Busca o usuário LOGADO (Server-side Auth)
+  // --- CONTEXTO (Server Side) ---
   const cookieStore = await cookies();
-  
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_HUB_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_HUB_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) { return cookieStore.get(name)?.value; },
-      },
-    }
+    { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
   );
 
   const { data: { user: currentUser } } = await supabase.auth.getUser();
-
-  // 3. Determina o Status da Relação (Visitante vs Dono)
   const isLoggedIn = !!currentUser;
   
   let isOwner = false;
-  if (currentUser) {
-     // Verifica se o ID do perfil visitado bate com o ID do usuário logado
-     // Como sua tabela usa 'id' ou 'user_id', validamos pelo facillit_id que é único
-     if (currentUser.id && profile.facillit_id) {
-         // Busca simples para confirmar ownership
-         const { data: myProfile } = await supabase
-            .from("profiles")
-            .select("facillit_id")
-            .eq("id", currentUser.id) // Ajuste baseado nos seus logs (busca por ID direto)
-            .maybeSingle(); // maybeSingle evita erro se não achar na primeira tentativa
-         
-         // Se não achou por ID, tenta por user_id (fallback)
-         if (!myProfile) {
-             const { data: myProfileByUserId } = await supabase
-                .from("profiles")
-                .select("facillit_id")
-                .eq("user_id", currentUser.id)
-                .maybeSingle();
-             
-             if (myProfileByUserId && myProfileByUserId.facillit_id === profile.facillit_id) {
-                 isOwner = true;
-             }
-         } else if (myProfile.facillit_id === profile.facillit_id) {
-             isOwner = true;
-         }
-     }
+  if (currentUser && profile.facillit_id) {
+    const { data: myProfile } = await supabase
+        .from("profiles")
+        .select("facillit_id")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+
+    if (myProfile?.facillit_id === profile.facillit_id) {
+        isOwner = true;
+    }
   }
 
   return (
-    <div className="flex min-h-screen bg-white">
-      <Sidebar />
+    <div className="min-h-screen bg-white font-sans text-gray-900">
       
-      <main className="flex-1 lg:ml-64 w-full min-h-screen flex flex-col">
+      {/* Sidebar: Só renderiza se estiver logado (passamos o currentUser) */}
+      {isLoggedIn && <Sidebar user={currentUser} />}
+      
+      {/* LAYOUT ADJUSTMENT:
+         lg:pl-64 -> Padding só se estiver logado (já que a sidebar só aparece logado).
+         Se não estiver logado, ocupa a tela toda (pl-0).
+      */}
+      <main className={`w-full min-h-screen flex flex-col transition-all duration-300 ${isLoggedIn ? 'lg:pl-64' : ''}`}>
         
-        {/* --- TOP BAR (Identidade Hub) --- */}
-        <div className="relative bg-white border-b border-gray-100">
-            
+        {/* --- HEADER CLEAN (Seamless) --- */}
+        <div className="relative">
             {/* Capa */}
-            <div className="h-48 md:h-60 w-full relative bg-gray-50 overflow-hidden group">
+            <div className="h-40 md:h-56 w-full relative bg-gray-50 group">
                 {profile.cover_url ? (
-                   // CORREÇÃO AQUI: <Image /> em vez de <image>
                    <Image 
                      src={profile.cover_url} 
                      alt="Capa" 
                      fill 
-                     className="object-cover"
+                     className="object-cover opacity-95"
                      priority
                    />
                 ) : (
@@ -109,146 +82,165 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 )}
                 
                 {isOwner && (
-                    <button className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70">
-                        <Settings size={16} />
+                    <button className="absolute bottom-4 right-4 bg-white/90 backdrop-blur text-xs font-medium px-3 py-1.5 rounded-full shadow-sm hover:bg-white transition-all flex items-center gap-1.5">
+                        <Edit3 size={12} /> Editar capa
                     </button>
                 )}
             </div>
 
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-6">
-                <div className="relative -mt-16 flex flex-col md:flex-row items-end md:items-end gap-6">
+            <div className="max-w-4xl mx-auto px-6">
+                <div className="relative -mt-12 flex flex-col md:flex-row items-start gap-6 pb-8 border-b border-gray-100">
                     
                     {/* Avatar */}
-                    <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white shadow-sm bg-white overflow-hidden shrink-0">
+                    <div className="relative w-24 h-24 md:w-32 md:h-32 rounded-full ring-4 ring-white bg-white overflow-hidden shrink-0 shadow-sm z-10">
                         {profile.avatar_url ? (
-                            <Image 
-                            src={profile.avatar_url} 
-                            alt={profile.username} 
-                            fill 
-                            className="object-cover"
-                            />
+                            <Image src={profile.avatar_url} alt={profile.username} fill className="object-cover" />
                         ) : (
-                            <div className="w-full h-full bg-gray-100 flex items-center justify-center text-4xl font-bold text-gray-300 select-none">
+                            <div className="w-full h-full bg-gray-50 flex items-center justify-center text-3xl font-bold text-gray-300">
                                 {profile.username[0].toUpperCase()}
                             </div>
                         )}
                     </div>
 
-                    {/* Informações Principais */}
-                    <div className="flex-1 text-center md:text-left mb-2">
-                        <h1 className="text-2xl font-bold text-black flex items-center justify-center md:justify-start gap-2">
-                            {profile.full_name || profile.username}
-                        </h1>
-                        <p className="text-gray-500 font-medium">@{profile.username}</p>
-                        
+                    {/* Informações (Letras menores e espaçamento ajustado) */}
+                    <div className="flex-1 w-full pt-14 md:pt-14">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h1 className="text-xl md:text-2xl font-bold text-black flex items-center gap-2">
+                                    {profile.full_name || profile.username}
+                                    <VerificationBadge badge={profile.verification_badge} size="md" />
+                                </h1>
+                                <p className="text-sm text-gray-500 font-medium">@{profile.username}</p>
+                            </div>
+
+                            {/* Actions (Desktop) */}
+                            <div className="hidden md:flex items-center gap-2">
+                                {!isLoggedIn && (
+                                    <a href="/login" className="bg-black text-white text-xs font-semibold px-4 py-2 rounded-full hover:bg-gray-800 transition-colors">
+                                        Entrar para Seguir
+                                    </a>
+                                )}
+                                {isLoggedIn && !isOwner && (
+                                    <button className="bg-brand-gradient text-white text-xs font-semibold px-4 py-2 rounded-full hover:opacity-90 transition-opacity">
+                                        Seguir
+                                    </button>
+                                )}
+                                {isOwner && (
+                                    <a href="/settings" className="border border-gray-200 text-gray-700 text-xs font-medium px-4 py-2 rounded-full hover:bg-gray-50 transition-colors">
+                                        Editar Perfil
+                                    </a>
+                                )}
+                                <button className="p-2 text-gray-400 hover:text-black transition-colors"><Share2 size={16} /></button>
+                            </div>
+                        </div>
+
                         {profile.bio && (
-                            <p className="mt-2 text-gray-800 text-sm max-w-xl mx-auto md:mx-0 leading-relaxed line-clamp-2">
+                            <p className="mt-4 text-sm text-gray-700 leading-relaxed max-w-2xl font-normal">
                                 {profile.bio}
                             </p>
                         )}
 
-                        <div className="flex items-center justify-center md:justify-start gap-4 mt-3 text-xs text-gray-400 font-medium uppercase tracking-wider">
-                            {profile.user_category && (
-                                <span className="bg-gray-100 px-2 py-1 rounded text-gray-600">{profile.user_category}</span>
-                            )}
-                            <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-6 mt-4 text-xs text-gray-500">
+                             {profile.user_category && (
+                                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-50 rounded text-gray-600 font-medium border border-gray-100">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-brand-green"/>
+                                    {profile.user_category}
+                                </span>
+                             )}
+                             <div className="flex items-center gap-1">
                                 <Calendar size={12} />
-                                <span>Desde {new Date(profile.created_at).getFullYear()}</span>
-                            </div>
+                                <span>{new Date(profile.created_at).getFullYear()}</span>
+                             </div>
                         </div>
                     </div>
-
-                    {/* --- ACTIONS BAR --- */}
-                    <div className="flex items-center gap-3 mb-2 w-full md:w-auto justify-center md:justify-end">
-                        
-                        {!isLoggedIn && (
-                            <a href="/login" className="px-6 py-2 bg-brand-purple text-white font-medium rounded-full hover:bg-brand-purple/90 transition-all text-sm shadow-sm flex items-center gap-2">
-                                <UserPlus size={16} />
-                                Seguir
-                            </a>
-                        )}
-
-                        {isLoggedIn && !isOwner && (
-                            <>
-                                <button className="px-6 py-2 bg-black text-white font-medium rounded-full hover:bg-gray-800 transition-all text-sm shadow-sm flex items-center gap-2">
-                                    <UserPlus size={16} />
-                                    Seguir
-                                </button>
-                                <button className="p-2 border border-gray-200 text-gray-600 rounded-full hover:bg-gray-50 transition-colors">
-                                    <MessageCircle size={20} />
-                                </button>
-                            </>
-                        )}
-
-                        {isOwner && (
-                            <a href="/settings" className="px-6 py-2 border border-gray-300 text-gray-700 font-medium rounded-full hover:bg-gray-50 transition-all text-sm shadow-sm flex items-center gap-2">
-                                <Settings size={16} />
-                                Editar
-                            </a>
-                        )}
-
-                        <button className="p-2 border border-gray-200 text-gray-600 rounded-full hover:bg-gray-50 transition-colors">
-                            <Share2 size={20} />
-                        </button>
-                    </div>
                 </div>
 
-                {/* Estatísticas */}
-                <div className="flex gap-8 mt-8 border-t border-gray-100 pt-6 justify-center md:justify-start">
-                    <div className="text-center md:text-left cursor-pointer hover:opacity-70">
-                        <span className="block font-bold text-black text-xl">{profile.stats.books_read}</span>
-                        <span className="text-gray-500 text-xs uppercase tracking-wide">Livros</span>
-                    </div>
-                    <div className="text-center md:text-left cursor-pointer hover:opacity-70">
-                        <span className="block font-bold text-black text-xl">{profile.stats.followers}</span>
-                        <span className="text-gray-500 text-xs uppercase tracking-wide">Seguidores</span>
-                    </div>
-                    <div className="text-center md:text-left cursor-pointer hover:opacity-70">
-                        <span className="block font-bold text-black text-xl">{profile.stats.following}</span>
-                        <span className="text-gray-500 text-xs uppercase tracking-wide">Seguindo</span>
-                    </div>
+                {/* Actions (Mobile Only) */}
+                <div className="md:hidden flex items-center gap-2 py-4 border-b border-gray-100">
+                     {/* Mesma lógica de botões acima, versão mobile width-full */}
+                     {!isLoggedIn ? (
+                        <a href="/login" className="flex-1 bg-black text-white text-sm font-medium py-2 rounded-lg text-center">Entrar</a>
+                     ) : !isOwner ? (
+                        <button className="flex-1 bg-brand-gradient text-white text-sm font-medium py-2 rounded-lg">Seguir</button>
+                     ) : (
+                        <a href="/settings" className="flex-1 border border-gray-200 text-sm font-medium py-2 rounded-lg text-center">Editar</a>
+                     )}
+                </div>
+
+                {/* Stats Seamless (Sem cards) */}
+                <div className="flex gap-12 py-6 border-b border-gray-100">
+                     <div className="cursor-pointer hover:opacity-70 transition-opacity">
+                        <span className="block text-lg font-bold text-black">{profile.stats.books_read}</span>
+                        <span className="text-xs text-gray-500 font-medium">LIVROS</span>
+                     </div>
+                     <div className="cursor-pointer hover:opacity-70 transition-opacity">
+                        <span className="block text-lg font-bold text-black">{profile.stats.followers}</span>
+                        <span className="text-xs text-gray-500 font-medium">SEGUIDORES</span>
+                     </div>
+                     <div className="cursor-pointer hover:opacity-70 transition-opacity">
+                        <span className="block text-lg font-bold text-black">{profile.stats.following}</span>
+                        <span className="text-xs text-gray-500 font-medium">SEGUINDO</span>
+                     </div>
                 </div>
             </div>
+
         </div>
 
-        {/* --- FEED --- */}
-        <div className="flex-1 bg-white max-w-5xl mx-auto w-full px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
-                <div className="flex items-center gap-6 border-b border-gray-100 mb-6">
-                    <button className="py-2 border-b-2 border-brand-purple font-semibold text-black text-sm">Feed</button>
-                    <button className="py-2 border-b-2 border-transparent text-gray-500 hover:text-black transition-colors text-sm">Estantes</button>
+        {/* --- ÁREA DE CONTEÚDO (3 Colunas Conceituais, Fundo Branco) --- */}
+        <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-12">
+            
+            {/* Feed Principal */}
+            <div className="lg:col-span-2">
+                {/* Tabs Minimalistas */}
+                <div className="flex items-center gap-6 mb-8 border-b border-gray-100 pb-1px">
+                    <button className="text-sm font-semibold text-black border-b-2 border-brand-purple pb-3 -mb-[2px]">
+                        Atividades
+                    </button>
+                    <button className="text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors pb-3">
+                        Estantes
+                    </button>
+                    <button className="text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors pb-3">
+                        Resenhas
+                    </button>
                 </div>
 
-                <div className="flex flex-col items-center justify-center py-16 px-4 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-center">
-                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
-                        <BookOpen className="text-gray-300" size={24} />
+                {/* Empty State Integrado (Sem borda grossa) */}
+                <div className="py-12 text-center">
+                    <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <BookOpen className="text-gray-300" size={20} />
                     </div>
-                    <h3 className="text-gray-900 font-medium mb-1">Ainda não há publicações</h3>
-                    <p className="text-gray-500 text-sm max-w-xs">
+                    <p className="text-sm text-gray-900 font-medium">Nenhuma atividade recente</p>
+                    <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto">
                         {isOwner 
-                            ? "Compartilhe sua leitura atual para começar." 
-                            : `${profile.username} ainda não publicou nada.`}
+                            ? "Suas leituras e anotações aparecerão aqui." 
+                            : "Este usuário ainda não compartilhou atualizações."}
                     </p>
                 </div>
             </div>
 
-            <aside className="hidden lg:block space-y-6">
-                <div className="p-6 rounded-xl border border-gray-100 bg-white shadow-sm">
-                    <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                        <span className="w-1 h-4 bg-brand-green rounded-full"/>
-                        Meta de Leitura
+            {/* Sidebar Direita (Informações Contextuais) */}
+            <aside className="hidden lg:block space-y-8">
+                
+                {/* Meta de Leitura (Clean) */}
+                <div>
+                    <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                         <span className="w-1.5 h-1.5 bg-brand-green rounded-full" />
+                         Meta 2025
                     </h3>
-                    <div className="space-y-3">
-                        <div className="flex justify-between text-sm text-gray-600">
-                            <span>Anual</span>
-                            <span className="font-medium text-black">0 / 12</span>
-                        </div>
-                        <div className="w-full bg-gray-100 rounded-full h-2">
-                            <div className="bg-brand-green h-2 rounded-full w-[5%]" />
-                        </div>
+                    <div className="flex items-baseline gap-1 mb-2">
+                         <span className="text-2xl font-bold text-black">0</span>
+                         <span className="text-xs text-gray-400">/ 12 livros</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-brand-gradient h-full w-[2%] rounded-full" />
                     </div>
                 </div>
+
+                {/* Bio Extra / Links (Se houver) */}
+                {/* Aqui entrarão widgets futuros como "Lendo Agora" */}
+
             </aside>
+
         </div>
       </main>
     </div>

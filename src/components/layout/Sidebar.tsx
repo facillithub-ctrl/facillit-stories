@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
@@ -9,159 +8,127 @@ import {
   MessageSquare, 
   Users, 
   Settings, 
-  Menu, 
-  X, 
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-  UserCircle
+  Sparkles,
+  BookOpen,
+  LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { User } from "@supabase/supabase-js"; // Tipo do usuário
 
-// Itens de navegação atualizados
-const NAV_ITEMS = [
-  { label: "Feed", href: "/", icon: LayoutDashboard, active: true },
-  { label: "Biblioteca", href: "/library", icon: Library, active: false, status: "Em breve" },
-  { label: "Fóruns", href: "/forums", icon: MessageSquare, active: false, status: "Em breve" },
-  { label: "Clubes", href: "/clubs", icon: Users, active: false, status: "Em breve" },
-  // Configurações agora é ativo e leva para a página correta
-  { label: "Configurações", href: "/settings", icon: Settings, active: true },
+// Definição das Categorias de Navegação
+const MENU_SECTIONS = [
+  {
+    category: "Principal",
+    items: [
+      { label: "Feed", href: "/", icon: LayoutDashboard },
+      { label: "Minha Biblioteca", href: "/library", icon: Library },
+    ]
+  },
+  {
+    category: "Comunidade",
+    items: [
+      { label: "Fóruns", href: "/forums", icon: MessageSquare },
+      { label: "Clubes de Leitura", href: "/clubs", icon: Users },
+    ]
+  },
+  {
+    category: "Conta",
+    items: [
+      { label: "Configurações", href: "/settings", icon: Settings },
+    ]
+  }
 ];
 
-export function Sidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+interface SidebarProps {
+  user?: User | null; // Recebe o usuário para decidir se renderiza
+}
+
+export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
 
+  // REGRA DE OURO: Se não tem usuário, não mostra a sidebar.
+  if (!user) return null;
+
   return (
-    <>
-      {/* Mobile Trigger */}
-      <div className="lg:hidden fixed top-4 left-4 z-50">
-        <button
-          onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="p-2 bg-white rounded-md shadow-sm border border-gray-200 text-brand-purple hover:bg-gray-50 transition-colors"
-        >
-          {isMobileOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
+    <aside className="fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-100 flex flex-col">
+      
+      {/* 1. Header da Marca */}
+      <div className="h-16 flex items-center px-6 border-b border-gray-50">
+        <div className="flex flex-col">
+          <span className="font-bold text-lg text-brand-purple tracking-tight">
+            Facillit<span className="text-brand-green">.</span>
+          </span>
+          <span className="text-[9px] text-gray-400 font-bold tracking-[0.25em] uppercase">
+            Stories
+          </span>
+        </div>
       </div>
 
-      {/* Overlay Mobile */}
-      {isMobileOpen && (
-        <div 
-          className="fixed inset-0 bg-black/20 z-40 lg:hidden backdrop-blur-sm"
-          onClick={() => setIsMobileOpen(false)}
-        />
-      )}
+      {/* 2. Navegação Categorizada */}
+      <div className="flex-1 overflow-y-auto py-6 px-4 space-y-8">
+        {MENU_SECTIONS.map((section) => (
+          <div key={section.category}>
+            <h3 className="px-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+              {section.category}
+            </h3>
+            <nav className="space-y-0.5">
+              {section.items.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                      isActive 
+                        ? "bg-brand-purple/5 text-brand-purple" 
+                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                    )}
+                  >
+                    <item.icon 
+                      size={18} 
+                      className={cn(isActive && "text-brand-purple")}
+                      strokeWidth={isActive ? 2.5 : 2} 
+                    />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        ))}
 
-      {/* Sidebar Container */}
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-100 transition-all duration-300 ease-in-out flex flex-col",
-          isMobileOpen ? "translate-x-0 w-72 shadow-2xl" : "-translate-x-full lg:translate-x-0",
-          isCollapsed ? "lg:w-20" : "lg:w-64"
-        )}
-      >
-        {/* Header / Logo */}
-        <div className="h-20 flex items-center justify-between px-6 border-b border-gray-50">
-          {!isCollapsed && (
-            <div className="flex flex-col">
-              <span className="font-bold text-xl text-brand-purple tracking-tight">
-                Facillit<span className="text-brand-green">.</span>
-              </span>
-              <span className="text-[10px] text-gray-400 font-medium tracking-widest uppercase">Stories</span>
-            </div>
-          )}
-          
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="hidden lg:flex p-1.5 rounded-full hover:bg-brand-purple/5 text-gray-400 hover:text-brand-purple transition-colors"
-          >
-            {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+        {/* 3. Card de Incentivo (IA / Feature) */}
+        <div className="mt-8 mx-1 p-4 rounded-xl bg-gradient-to-br from-brand-purple/5 to-transparent border border-brand-purple/10">
+          <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center mb-3">
+             <Sparkles size={14} className="text-brand-purple" />
+          </div>
+          <h4 className="text-sm font-bold text-gray-900 mb-1">Facillit AI</h4>
+          <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+            Obtenha análises profundas das suas leituras atuais.
+          </p>
+          <button className="text-xs font-semibold text-brand-purple hover:underline">
+            Explorar →
           </button>
         </div>
+      </div>
 
-        {/* Nav Items */}
-        <nav className="flex-1 overflow-y-auto py-8 px-4 space-y-2">
-          {NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.active ? item.href : "#"}
-                className={cn(
-                  "flex items-center gap-4 px-3 py-3 rounded-lg text-sm font-medium transition-all group relative",
-                  // Lógica de Cores da Marca
-                  isActive 
-                    ? "bg-brand-purple/10 text-brand-purple shadow-sm ring-1 ring-brand-purple/20" 
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
-                  !item.active && "opacity-60 cursor-not-allowed"
-                )}
-                onClick={() => setIsMobileOpen(false)}
-              >
-                <item.icon 
-                  size={22} 
-                  strokeWidth={isActive ? 2.5 : 2}
-                  className={cn(isActive && "text-brand-purple")} 
-                />
-                
-                {!isCollapsed && (
-                  <span className="flex-1 truncate">{item.label}</span>
-                )}
-
-                {!isCollapsed && item.status && (
-                  <span className="text-[10px] uppercase tracking-wider font-bold text-brand-purple/60 bg-brand-purple/5 px-2 py-0.5 rounded-full">
-                    Breve
-                  </span>
-                )}
-                
-                {/* Indicador lateral ativo */}
-                {isActive && !isCollapsed && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-brand-gradient rounded-r-full" />
-                )}
-
-                {/* Tooltip Collapsed */}
-                {isCollapsed && (
-                  <div className="absolute left-full ml-4 px-3 py-1.5 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">
-                    {item.label}
-                  </div>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Footer User Area */}
-        <div className="p-4 border-t border-gray-50">
-           {/* Link rápido para o Perfil do usuário logado (Placeholder por enquanto) */}
-            <Link 
-              href="/u/me" 
-              className={cn(
-                "flex items-center gap-3 w-full p-2 mb-2 rounded-lg hover:bg-gray-50 transition-colors",
-                isCollapsed && "justify-center"
-              )}
-            >
-              <div className="w-8 h-8 rounded-full bg-brand-gradient p-[2px]">
-                <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
-                  <UserCircle size={16} className="text-brand-purple" />
-                </div>
-              </div>
-              {!isCollapsed && (
-                <div className="flex flex-col text-left">
-                  <span className="text-sm font-medium text-gray-900">Meu Perfil</span>
-                  <span className="text-xs text-gray-400">Ver público</span>
-                </div>
-              )}
-            </Link>
-
-          <Link href="/login" className={cn(
-            "flex items-center gap-3 w-full p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors",
-            isCollapsed && "justify-center"
-          )}>
-            <LogOut size={20} />
-            {!isCollapsed && <span className="text-sm font-medium">Sair</span>}
-          </Link>
+      {/* 4. Footer User Info (Minimalista) */}
+      <div className="p-4 border-t border-gray-50 bg-white">
+        <div className="flex items-center gap-3 p-2 rounded-lg border border-gray-100 shadow-sm">
+           <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold text-xs">
+              {user.email?.charAt(0).toUpperCase()}
+           </div>
+           <div className="flex-1 overflow-hidden">
+              <p className="text-xs font-bold text-gray-900 truncate">Minha Conta</p>
+              <p className="text-[10px] text-gray-400 truncate">{user.email}</p>
+           </div>
+           <Link href="/login" title="Sair" className="text-gray-400 hover:text-red-500 transition-colors">
+              <LogOut size={14} />
+           </Link>
         </div>
-      </aside>
-    </>
+      </div>
+
+    </aside>
   );
 }
